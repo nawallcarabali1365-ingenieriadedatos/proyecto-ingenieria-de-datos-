@@ -13,12 +13,12 @@ Puedes ver nuestro Diagrama de clases en el siguiente enlace:
 ##  Diagrma MER
 Puedes ver nuestro Diagrama MER en el siguiente enlace:
 
-[ver diagrma MER](https://drive.google.com/file/d/1JuNT-vfhZsZLL04od-6rKxn9CRgPZ_0F/view?usp=sharing)
+[ver diagrama MER](https://drive.google.com/file/d/1JuNT-vfhZsZLL04od-6rKxn9CRgPZ_0F/view?usp=sharing)
 
 ##  Diagrma MR
 Puedes ver nuestro Diagrama MR en el siguiente enlace:
 
-[ver diagrma MR](https://drive.google.com/file/d/1KTUZuJ0j0hjzfUYx5gHQofPv7pfA7nev/view?usp=sharing)
+[ver diagrama MR](https://drive.google.com/file/d/1KTUZuJ0j0hjzfUYx5gHQofPv7pfA7nev/view?usp=sharing)
 
 ##  Diccionario de datos
 Puedes ver el diccionario de datos de nuestro proyecto en el siguiente enlace:
