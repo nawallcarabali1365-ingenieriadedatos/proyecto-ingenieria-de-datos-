@@ -3,6 +3,6 @@ repositorio compartido
 ## Tablero de Trello
 Puedes consultar el tablero del proyecto en el siguiente enlace:
 
-[Ver tablero de Trello](https://trello.com/invite/b/6a873c353862bd990af26784/ATTI74ec32dd55a368ef4f7ee74feef3b1caF09B8ED7/historias-de-usuario)
+[Ver tablero de Trello](https://trello.com/invite/b/6a92432a45f47c077b77ed26/ATTI945e5193ea7514e5acdd5f2132ce930b706F7446/backlog)
 
-[Ver nuestro diagrama de clases](https://drive.google.com/file/d/14A752Fw2xUGdK02RDfnSQb98m71YLthG/view?usp=sharing)
+[Ver nuestro diagrama de clases](https://drive.google.com/file/d/1at7nsMhTnM-Qj8yjeqF59H_hs1rxOZ9V/view?usp=sharing)
