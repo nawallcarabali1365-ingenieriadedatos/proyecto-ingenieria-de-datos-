@@ -10,12 +10,12 @@ Puedes ver nuestro Diagrama de clases en el siguiente enlace:
 
 [Ver nuestro diagrama de clases](https://drive.google.com/file/d/1at7nsMhTnM-Qj8yjeqF59H_hs1rxOZ9V/view?usp=sharing)
 
-##  Diagrma MER
+##  Diagrma Modelo Entidad Relacion.
 Puedes ver nuestro Diagrama MER en el siguiente enlace:
 
 [ver diagrama MER](https://drive.google.com/file/d/1JuNT-vfhZsZLL04od-6rKxn9CRgPZ_0F/view?usp=sharing)
 
-##  Diagrma MR
+##  Diagrma Modelo Relacional
 Puedes ver nuestro Diagrama MR en el siguiente enlace:
 
 [ver diagrama MR](https://drive.google.com/file/d/1KTUZuJ0j0hjzfUYx5gHQofPv7pfA7nev/view?usp=sharing)
