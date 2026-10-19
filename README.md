@@ -3,12 +3,12 @@ repositorio compartido
 ## Tablero de Trello
 Puedes consultar el tablero de tareas de nuestro proyecto en el siguiente enlace:
 
-[Ver tablero de Trello](https://trello.com/invite/b/6a92432a45f47c077b77ed26/ATTI945e5193ea7514e5acdd5f2132ce930b706F7446/backlog)
+[Ver tablero de Trello](https://trello.com/invite/b/6ad5807b9aa4138a0fd43b97/ATTIf27c3cb61f95734144dbb59d693d45016529A0E5/proyecto-ingenieria-de-datos)
 
 ## Diagrama de clases
 Puedes ver nuestro Diagrama de clases en el siguiente enlace:
 
-[Ver nuestro diagrama de clases](https://drive.google.com/file/d/1at7nsMhTnM-Qj8yjeqF59H_hs1rxOZ9V/view?usp=sharing)
+[Ver nuestro diagrama de clases](https://drive.google.com/file/d/1DplysP2Yahadddlxuv6d35ymufdLlHtM/view)
 
 ##  Diagrma Modelo Entidad Relacion.
 Puedes ver nuestro Diagrama MER en el siguiente enlace:
@@ -18,10 +18,10 @@ Puedes ver nuestro Diagrama MER en el siguiente enlace:
 ##  Diagrma Modelo Relacional
 Puedes ver nuestro Diagrama MR en el siguiente enlace:
 
-[ver diagrama MR](https://drive.google.com/file/d/1KTUZuJ0j0hjzfUYx5gHQofPv7pfA7nev/view?usp=sharing)
+[ver diagrama MR](https://drive.google.com/file/d/1F06bOusukNodGNZgIpqxDnMFt8OcSt8x/view)
 
 ##  Diccionario de datos
 Puedes ver el diccionario de datos de nuestro proyecto en el siguiente enlace:
 
-[ver diccionario de datos](https://docs.google.com/spreadsheets/d/1FKSfXf7Gdk0AgXjqiJ4sPffmwKBNONMKO4NF-jEdkMY/edit?usp=sharing)
+[ver diccionario de datos](https://docs.google.com/spreadsheets/d/1RoZvzY79x0CjIT5GvCRLQZSCrK5x6-JTdnGC8aftV7s/edit?gid=334623371#gid=334623371)
 
