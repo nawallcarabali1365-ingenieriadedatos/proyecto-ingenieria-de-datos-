@@ -920,21 +920,8 @@ insert into asistencia (fecha, categoria, justificada, justificacion, fecha_hora
   ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:48:00', 50, 46, 15, 19, null),
   ('2026-08-07', 'EVASION', true, 'MEDICA', '2026-08-07 13:44:00', 50, 46, 16, 27, 43);
 
--- =====================================================================
--- 03_triggers.sql  -  Auditoría y triggers
--- Se ejecuta después de cargar los datos de prueba para que los
--- triggers no alteren los registros iniciales.
--- =====================================================================
-use colegio_mzo;
 
--- ---------------------------------------------------------------------
--- Tabla de auditoría (bitácora)
--- No hace parte del modelo de datos (MER): es una tabla de soporte que
--- llenan solos los triggers. Guarda quién modificó o eliminó un registro
--- de asistencia, qué valor cambió y por qué (RQF 044 a 049).
--- idasistencia e idestudiante no son llaves foráneas a propósito: así
--- la auditoría se conserva aunque el registro de asistencia se elimine.
--- ---------------------------------------------------------------------
+-- Tabla de auditoría 
 drop table if exists auditoria_asistencia;
 create table auditoria_asistencia (
     idauditoria      int           not null auto_increment,
@@ -948,8 +935,8 @@ create table auditoria_asistencia (
     idestudiante     int           not null,
     idusuario        int           not null,
     constraint pk_auditoria primary key (idauditoria),
-    constraint fk_auditoria_usuario foreign key (idusuario) references usuario (idusuario)
-) engine = innodb;
+    constraint fk_auditoriausuario foreign key (idusuario) references usuario (idusuario)
+) ;
 
 create index ix_auditoria_fechahora on auditoria_asistencia (fechahora);
 
