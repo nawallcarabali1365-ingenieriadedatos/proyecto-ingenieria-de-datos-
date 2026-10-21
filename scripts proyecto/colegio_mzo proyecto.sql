@@ -85,7 +85,7 @@ create table usuario (
     nombres varchar(60)   not null,
     apellidos varchar(60)   not null,
     correo varchar(100) unique  not null,
-    contrasena varchar(255)  not null,  
+    contrasena varchar(20)  not null,  
     rol enum('COORDINADOR','MAESTRO') not null,
     activo boolean not null default true,
     constraint uq_usuario unique (numerodocumentoUsu, correo)
