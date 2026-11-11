@@ -979,6 +979,227 @@ insert into auditoria_asistencia (accion, campomodificado, valoranterior, valorn
   ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-08 07:50:00', 279),
   ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-08 09:44:00', 449),
   ('MODIFICAR', 'categoria', 'FALTO', 'RETARDO', 'El estudiante llegó después del primer llamado de lista', '2026-08-08 11:40:00', 399);  
+
+-- MODULO 1
+-- RQF 001 & 002: Crear usuario y registrar datos personales / de acceso
+drop procedure if exists sp_rqf001_crear_usuario 
+delimiter //
+create procedure sp_rqf001_crear_usuario(
+    in p_numerodocumentoUsu varchar(20),
+    in p_nombres varchar(60),
+    in p_apellidos varchar(60),
+    in p_correo varchar(100),
+    in p_contrasena varchar(255)
+)
+begin
+    if trim(p_numerodocumentoUsu) = '' or trim(p_nombres) = '' or trim(p_apellidos) = '' or trim(p_correo) = '' or trim(p_contrasena) = '' then
+        signal sqlstate '45000' set message_text = 'Error: Todos los campos obligatorios deben estar diligenciados.';
+    end if;
+
+    if p_correo not regexp '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$' then
+        signal sqlstate '45000' set message_text = 'Error: El formato del correo electrónico no es válido.';
+    end if;
+
+    call sp_rqf004_validar_unicos(p_numerodocumentoUsu, p_correo);
+
+    insert into usuario (numerodocumentoUsu, nombres, apellidos, correo, contrasena, rol, activo)
+    values (p_numerodocumentoUsu, p_nombres, p_apellidos, p_correo, sha2(p_contrasena, 256), 'MAESTRO', true);
+
+    select 'Usuario registrado exitosamente' as mensaje;
+end //
+delimiter ;
+
+
+-- RQF 004: Validar datos únicos
+
+delimiter //
+drop procedure if exists sp_rqf004_validar_unicos //
+create procedure sp_rqf004_validar_unicos(
+    in p_numerodocumentoUsu varchar(20),
+    in p_correo varchar(100)
+)
+begin
+    if exists (select 1 from usuario where numerodocumentoUsu = p_numerodocumentoUsu) then
+        signal sqlstate '45000' set message_text = 'Error: El número de documento ya se encuentra registrado.';
+    end if;
+
+    if exists (select 1 from usuario where correo = p_correo) then
+        signal sqlstate '45000' set message_text = 'Error: El correo electrónico ya se encuentra registrado.';
+    end if;
+end //
+delimiter ;
+
+
+-- RQF 008: Controlar acceso por rol 
+delimiter //
+drop procedure if exists sp_rqf008_controlar_acceso //
+create procedure sp_rqf008_controlar_acceso(
+    in p_idusuario int,
+    in p_rol_requerido varchar(20),
+    out p_tiene_acceso boolean
+)
+begin
+    declare v_rol_actual varchar(20);
+    declare v_activo boolean;
+
+    select rol, activo into v_rol_actual, v_activo 
+    from usuario 
+    where idusuario = p_idusuario;
+
+    if v_activo = true and v_rol_actual = p_rol_requerido then
+        set p_tiene_acceso = true;
+    else
+        set p_tiene_acceso = false;
+    end if;
+end //
+delimiter ;
+
+
+-- RQF 003: Asignar rol inicial
+
+delimiter //
+drop procedure if exists sp_rqf003_asignar_rol //
+create procedure sp_rqf003_asignar_rol(
+    in p_idcoordinador int,
+    in p_idusuario int,
+    in p_nuevo_rol varchar(20)
+)
+begin
+    declare v_acceso boolean;
+
+    call sp_rqf008_controlar_acceso(p_idcoordinador, 'COORDINADOR', v_acceso);
+    if v_acceso = false then
+        signal sqlstate '45000' set message_text = 'Error: No tiene permisos de coordinador para asignar roles.';
+    end if;
+
+    if not exists (select 1 from usuario where idusuario = p_idusuario) then
+        signal sqlstate '45000' set message_text = 'Error: El usuario al que intenta asignar rol no existe.';
+    end if;
+
+    if p_nuevo_rol not in ('COORDINADOR', 'MAESTRO') then
+        signal sqlstate '45000' set message_text = 'Error: El rol debe ser COORDINADOR o MAESTRO.';
+    end if;
+
+    update usuario 
+    set rol = p_nuevo_rol 
+    where idusuario = p_idusuario;
+end //
+delimiter ;
+
+
+-- RQF 005: Actualizar datos del usuario
+
+delimiter //
+drop procedure if exists sp_rqf005_actualizar_datos //
+create procedure sp_rqf005_actualizar_datos(
+    in p_idcoordinador int,
+    in p_idusuario int,
+    in p_nombres varchar(60),
+    in p_apellidos varchar(60),
+    in p_correo varchar(100)
+)
+begin
+    declare v_acceso boolean;
+
+    -- Control de acceso por rol
+    call sp_rqf008_controlar_acceso(p_idcoordinador, 'COORDINADOR', v_acceso);
+    if v_acceso = false then
+        signal sqlstate '45000' set message_text = 'Error: No tiene permisos de coordinador para actualizar usuarios.';
+    end if;
+
+    if not exists (select 1 from usuario where idusuario = p_idusuario) then
+        signal sqlstate '45000' set message_text = 'Error: El usuario que intenta actualizar no existe.';
+    end if;
+
+    if p_correo not regexp '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$' then
+        signal sqlstate '45000' set message_text = 'Error: El formato del correo electrónico no es válido.';
+    end if;
+
+    if exists (select 1 from usuario where correo = p_correo and idusuario <> p_idusuario) then
+        signal sqlstate '45000' set message_text = 'Error: El correo electrónico ya está en uso por otro usuario.';
+    end if;
+
+    update usuario
+    set nombres = p_nombres,
+        apellidos = p_apellidos,
+        correo = p_correo
+    where idusuario = p_idusuario;
+end //
+delimiter ;
+
+
+-- RQF 006: Cambiar estado del usuario 
+
+delimiter //
+drop procedure if exists sp_rqf006_cambiar_estado //
+create procedure sp_rqf006_cambiar_estado(
+    in p_idcoordinador int,
+    in p_idusuario int,
+    in p_activo boolean
+)
+begin
+    declare v_acceso boolean;
+
+    -- Control de acceso por rol
+    call sp_rqf008_controlar_acceso(p_idcoordinador, 'COORDINADOR', v_acceso);
+    if v_acceso = false then
+        signal sqlstate '45000' set message_text = 'Error: No tiene permisos de coordinador para cambiar el estado del usuario.';
+    end if;
+
+    if not exists (select 1 from usuario where idusuario = p_idusuario) then
+        signal sqlstate '45000' set message_text = 'Error: El usuario no existe.';
+    end if;
+
+    update usuario
+    set activo = p_activo
+    where idusuario = p_idusuario;
+end //
+delimiter ;
+
+
+-- RQF 007: Modificar rol del usuario autorizado
+
+delimiter //
+drop procedure if exists sp_rqf007_modificar_rol //
+create procedure sp_rqf007_modificar_rol(
+    in p_idcoordinador int,
+    in p_idusuario int,
+    in p_nuevo_rol varchar(20)
+)
+begin
+    declare v_acceso boolean;
+    declare v_rol_actual varchar(20);
+
+    -- Control de acceso por rol
+    call sp_rqf008_controlar_acceso(p_idcoordinador, 'COORDINADOR', v_acceso);
+    if v_acceso = false then
+        signal sqlstate '45000' set message_text = 'Error: No tiene permisos de coordinador para modificar roles.';
+    end if;
+
+    -- Validar  el usuario exista y obtener su rol actual
+    select rol into v_rol_actual 
+    from usuario 
+    where idusuario = p_idusuario;
+
+    if v_rol_actual is null then
+        signal sqlstate '45000' set message_text = 'Error: El usuario no existe.';
+    end if;
+
+    -- Validar que el rol sea válido
+    if p_nuevo_rol not in ('COORDINADOR', 'MAESTRO') then
+        signal sqlstate '45000' set message_text = 'Error: El rol debe ser COORDINADOR o MAESTRO.';
+    end if;
+
+    -- Rechazar si el usuario ya tiene ese rol asignado
+    if v_rol_actual = p_nuevo_rol then
+        signal sqlstate '45000' set message_text = 'Error: El usuario ya tiene asignado este rol actualmente.';
+    end if;
+
+    update usuario
+    set rol = p_nuevo_rol
+    where idusuario = p_idusuario;
+end //
+delimiter ;
   
   -- RQF 26 configurar categorías de asistencia --
 select
@@ -1123,10 +1344,752 @@ begin
         p_idusuario
     );
 end$$
+-- MODULO 2
+-- Modulo 2
+-- TRIGGERS
+--  2.1 Curso: el nombre debe indicar una jornada registrada 
+drop trigger if exists trg_curso_bi;
+drop trigger if exists trg_curso_bu;
+delimiter //
+create trigger trg_curso_bi before insert on curso
+for each row
+begin
+    if not exists (select 1 from jornada where new.nombre like concat('% - ', nombre)) then
+        signal sqlstate '45000'
+            set message_text = 'El nombre del curso debe terminar en una jornada registrada (ej.: 601 - Tarde)';
+    end if;
+end //
+delimiter //
+create trigger trg_curso_bu before update on curso
+for each row
+begin
+    if not exists (select 1 from jornada where new.nombre like concat('% - ', nombre)) then
+        signal sqlstate '45000'
+            set message_text = 'El nombre del curso debe terminar en una jornada registrada (ej.: 601 - Tarde)';
+    end if;
+end //
+-- 2.2 Bloque: formato del nombre, dentro del horario de la jornada y número <= cantidad de bloques del nivel 
+drop trigger if exists trg_bloque_bi;
+drop trigger if exists trg_bloque_bu;
 
+delimiter //
+create trigger trg_bloque_bi before insert on bloque
+for each row
+begin
+    declare v_ini  time;
+    declare v_fin  time;
+    declare v_cant int;
+ 
+    if not exists (select 1 from jornada where new.nombre like concat('% - ', nombre))
+       or not exists (select 1 from nivel where new.nombre like concat('% - ', nombre, ' - %')) then
+        signal sqlstate '45000'
+            set message_text = 'El nombre del bloque debe tener el formato Bloque N - Nivel - Jornada';
+    end if;
+ 
+    select horainicioJor, horafinJor into v_ini, v_fin
+    from jornada where new.nombre like concat('% - ', nombre) limit 1;
+ 
+    if new.horainicioBlo < v_ini or new.horafinBlo > v_fin then
+        signal sqlstate '45000'
+            set message_text = 'El bloque debe estar dentro del horario de la jornada';
+    end if;
+ 
+    select cantidadbloques into v_cant
+    from nivel where new.nombre like concat('% - ', nombre, ' - %') limit 1;
+ 
+    if new.numero > v_cant then
+        signal sqlstate '45000'
+            set message_text = 'El número del bloque supera la cantidad de bloques del nivel';
+    end if;
+end //
+ 
+ delimiter //
+create trigger trg_bloque_bu before update on bloque
+for each row
+begin
+    declare v_ini  time;
+    declare v_fin  time;
+    declare v_cant int;
+ 
+    if not exists (select 1 from jornada where new.nombre like concat('% - ', nombre))
+       or not exists (select 1 from nivel where new.nombre like concat('% - ', nombre, ' - %')) then
+        signal sqlstate '45000'
+            set message_text = 'El nombre del bloque debe tener el formato Bloque N - Nivel - Jornada';
+    end if;
+ 
+    select horainicioJor, horafinJor into v_ini, v_fin
+    from jornada where new.nombre like concat('% - ', nombre) limit 1;
+ 
+    if new.horainicioBlo < v_ini or new.horafinBlo > v_fin then
+        signal sqlstate '45000'
+            set message_text = 'El bloque debe estar dentro del horario de la jornada';
+    end if;
+ 
+    select cantidadbloques into v_cant
+    from nivel where new.nombre like concat('% - ', nombre, ' - %') limit 1;
+ 
+    if new.numero > v_cant then
+        signal sqlstate '45000'
+            set message_text = 'El número del bloque supera la cantidad de bloques del nivel';
+    end if;
+end //
+ 
+-- 2.3 Acudiente: tipo de documento y formato de correo (RQF-020, 023)
+drop trigger if exists trg_acudiente_bi;
+drop trigger if exists trg_acudiente_bu;
+delimiter //
+create trigger trg_acudiente_bi before insert on acudiente
+for each row
+begin
+    if new.tipodocumentoAcu not in ('CC','CE','PA','PPT') then
+        signal sqlstate '45000'
+            set message_text = 'Tipo de documento del acudiente inválido (CC, CE, PA, PPT)';
+    end if;
+    if new.correo is not null
+       and new.correo not regexp '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$' then
+        signal sqlstate '45000' set message_text = 'Formato de correo inválido';
+    end if;
+end //
 
+delimiter //
+create trigger trg_acudiente_bu before update on acudiente
+for each row
+begin
+    if new.tipodocumentoAcu not in ('CC','CE','PA','PPT') then
+        signal sqlstate '45000'
+            set message_text = 'Tipo de documento del acudiente inválido (CC, CE, PA, PPT)';
+    end if;
+    if new.correo is not null
+       and new.correo not regexp '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$' then
+        signal sqlstate '45000' set message_text = 'Formato de correo inválido';
+    end if;
+end //
+
+ 
+-- 2.4 Estudiante: tipo de documento y fecha de nacimiento  y prohibición de borrado 
+drop trigger if exists trg_estudiante_bi;
+drop trigger if exists trg_estudiante_bu;
+drop trigger if exists trg_estudiante_bd;
+delimiter //
+create trigger trg_estudiante_bi before insert on estudiante
+for each row
+begin
+    if new.tipodocumentoEst not in ('RC','TI','CC','PPT') then
+        signal sqlstate '45000'
+            set message_text = 'Tipo de documento del estudiante inválido (RC, TI, CC, PPT)';
+    end if;
+    if new.fechanacimiento >= curdate() then
+        signal sqlstate '45000'
+            set message_text = 'La fecha de nacimiento debe ser anterior a la fecha actual';
+    end if;
+end //
+ delimiter //
+create trigger trg_estudiante_bu before update on estudiante
+for each row
+begin
+    if new.tipodocumentoEst not in ('RC','TI','CC','PPT') then
+        signal sqlstate '45000'
+            set message_text = 'Tipo de documento del estudiante inválido (RC, TI, CC, PPT)';
+    end if;
+    if new.fechanacimiento >= curdate() then
+        signal sqlstate '45000'
+            set message_text = 'La fecha de nacimiento debe ser anterior a la fecha actual';
+    end if;
+end //
+ 
+-- El estudiante se desactiva, nunca se borra, para conservar su historial.
+delimiter //
+create trigger trg_estudiante_bd before delete on estudiante
+for each row
+begin
+    signal sqlstate '45000'
+        set message_text = 'No se permite eliminar estudiantes. Use el cambio de estado (desactivar)';
+end//
+
+-- 3. VISTAS 
+-- 3.1 Curso actual de cada estudiante = curso de su asistencia más reciente (en el esquema, la relación estudiante-curso vive en asistencia)
+create or replace view vw_estudiante_curso_actual as
+select e.idestudiante,
+       e.numerodocumentoEst,
+       e.nombres,
+       e.apellidos,
+       e.activo,
+       e.idacudiente,
+       a.idcurso,
+       a.fecha as fecha_ultimo_registro
+from estudiante e
+join asistencia a on a.idestudiante = e.idestudiante
+where a.idasistencia = (select a2.idasistencia
+                        from asistencia a2
+                        where a2.idestudiante = e.idestudiante
+                        order by a2.fecha desc, a2.fecha_hora_registro desc
+                        limit 1);
+ 
+-- 3.2 Cursos clasificados por nivel y jornada (RQF-013, 014)
+create or replace view vw_cursos_clasificados as
+select c.idcurso,
+       c.nombre       as curso,
+       c.grado,
+       c.aniolectivo,
+       c.activo,
+       n.idnivel,
+       n.nombre       as nivel,
+       j.idjornada,
+       j.nombre       as jornada,
+       (select count(*) from vw_estudiante_curso_actual ec
+        where ec.idcurso = c.idcurso and ec.activo = true) as estudiantes_activos
+from curso c
+join jornada j on c.nombre like concat('% - ', j.nombre)
+join nivel   n on n.nombre = if(c.grado <= 5, 'Primaria', 'Bachillerato');
+ 
+-- 3.3 Bloques clasificados por nivel y jornada (RQF-017, 018)
+create or replace view vw_bloques_clasificados as
+select b.idbloque,
+       b.nombre       as bloque,
+       b.numero,
+       b.horainicioBlo,
+       b.horafinBlo,
+       n.idnivel,
+       n.nombre       as nivel,
+       j.idjornada,
+       j.nombre       as jornada
+from bloque b
+join nivel   n on b.nombre like concat('% - ', n.nombre, ' - %')
+join jornada j on b.nombre like concat('% - ', j.nombre);
+ 
+-- 3.4 Estudiantes activos por curso con datos del acudiente (RQF-016)
+create or replace view vw_estudiantes_curso as
+select ec.idestudiante,
+       ec.numerodocumentoEst,
+       ec.nombres,
+       ec.apellidos,
+       cc.idcurso,
+       cc.curso,
+       cc.nivel,
+       cc.jornada,
+       a.idacudiente,
+       concat(a.nombres, ' ', a.apellidos) as acudiente,
+       a.parentesco,
+       a.telefono as telefono_acudiente
+from vw_estudiante_curso_actual ec
+join vw_cursos_clasificados cc on cc.idcurso = ec.idcurso
+join acudiente a on a.idacudiente = ec.idacudiente
+where ec.activo = true;
+ 
+-- 3.5 Acudientes con sus estudiantes (HU10)
+create or replace view vw_acudiente_estudiantes as
+select a.idacudiente,
+       a.tipodocumentoAcu,
+       a.numerodocumentoAcu,
+       concat(a.nombres, ' ', a.apellidos) as acudiente,
+       a.parentesco,
+       a.telefono,
+       a.correo,
+       a.direccion,
+       e.idestudiante,
+       concat(e.nombres, ' ', e.apellidos) as estudiante,
+       e.activo as estudiante_activo
+from acudiente a
+left join estudiante e on e.idacudiente = a.idacudiente;
+ 
+
+-- 4. PROCEDIMIENTOS ALMACENADOS
+-- Validan en el orden de los criterios de aceptación y devuelven los mismos mensajes de los escenarios de las HU.
+ -- Configurar jornadas 
+drop procedure if exists sp_rqf009_configurar_jornada;
+delimiter //
+create procedure sp_rqf009_configurar_jornada(
+    in p_idusuario int, in p_nombre varchar(20), in p_inicio time, in p_fin time)
+begin
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede configurar jornadas';
+    end if;
+    if p_nombre is null or trim(p_nombre) = '' or p_inicio is null or p_fin is null then
+        signal sqlstate '45000' set message_text = 'Todos los campos de la jornada son obligatorios';
+    end if;
+    if exists (select 1 from jornada where nombre = p_nombre) then
+        signal sqlstate '45000' set message_text = 'Jornada ya existente';
+    end if;
+    if p_fin <= p_inicio then
+        signal sqlstate '45000' set message_text = 'La hora de finalización debe ser posterior a la hora de inicio';
+    end if;
+ 
+    insert into jornada (nombre, horainicioJor, horafinJor) values (trim(p_nombre), p_inicio, p_fin);
+    select 'Jornada registrada exitosamente' as mensaje, last_insert_id() as idjornada;
+end //
+
+ 
+-- RQF-010 Seleccionar jornada: devuelve la jornada, sus cursos y bloques
+drop procedure if exists sp_rqf010_seleccionar_jornada;
+delimiter //
+create procedure sp_rqf010_seleccionar_jornada(in p_idjornada int)
+begin
+    if not exists (select 1 from jornada where idjornada = p_idjornada) then
+        signal sqlstate '45000' set message_text = 'La jornada no existe';
+    end if;
+    select * from jornada where idjornada = p_idjornada;
+    select idcurso, curso, grado, nivel, estudiantes_activos
+    from vw_cursos_clasificados
+    where idjornada = p_idjornada and activo = true
+    order by grado, curso;
+    select idbloque, bloque, nivel, horainicioBlo, horafinBlo
+    from vw_bloques_clasificados
+    where idjornada = p_idjornada
+    order by nivel, numero;
+end//
+
+--  Configurar niveles educativos
+drop procedure if exists sp_rqf011_configurar_nivel;
+delimiter //
+create procedure sp_rqf011_configurar_nivel(
+    in p_idusuario int, in p_nombre varchar(30), in p_cantidad int)
+begin
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede configurar niveles';
+    end if;
+    if p_nombre is null or trim(p_nombre) = '' or p_cantidad is null then
+        signal sqlstate '45000' set message_text = 'Todos los campos del nivel son obligatorios';
+    end if;
+    if exists (select 1 from nivel where nombre = p_nombre) then
+        signal sqlstate '45000' set message_text = 'Nivel ya existente';
+    end if;
+    if p_cantidad <= 0 then
+        signal sqlstate '45000' set message_text = 'La cantidad de bloques debe ser mayor que 0';
+    end if;
+ 
+    insert into nivel (nombre, cantidadbloques) values (trim(p_nombre), p_cantidad);
+    select 'Nivel registrado exitosamente' as mensaje, last_insert_id() as idnivel;
+end //
+
+ 
+-- Seleccionar nivel: devuelve el nivel, sus cursos y bloques (p_idjornada NULL = las dos jornadas)
+drop procedure if exists sp_rqf012_seleccionar_nivel;
+delimiter //
+create procedure sp_rqf012_seleccionar_nivel(in p_idnivel int, in p_idjornada int)
+begin
+    if not exists (select 1 from nivel where idnivel = p_idnivel) then
+        signal sqlstate '45000' set message_text = 'El nivel no existe';
+    end if;
+ 
+    select * from nivel where idnivel = p_idnivel;
+ 
+    select idcurso, curso, grado, jornada, estudiantes_activos
+    from vw_cursos_clasificados
+    where idnivel = p_idnivel and activo = true
+      and (p_idjornada is null or idjornada = p_idjornada)
+    order by jornada, grado, curso;
+ 
+    select idbloque, bloque, jornada, horainicioBlo, horafinBlo
+    from vw_bloques_clasificados
+    where idnivel = p_idnivel
+      and (p_idjornada is null or idjornada = p_idjornada)
+    order by jornada, numero;
+end //
+
+ 
+-- Crear curso: El nombre se arma con la jornada para que quede asociado a ella: p_numero '604' + jornada Tarde -> '604 - Tarde' y  El nivel queda determinado por el grado.
+drop procedure if exists sp_rqf013_crear_curso;
+delimiter //
+create procedure sp_rqf013_crear_curso(
+    in p_idusuario   int,
+    in p_numero      varchar(10),
+    in p_grado       int,
+    in p_aniolectivo year,
+    in p_idjornada   int)
+begin
+    declare v_nombre varchar(20);
+ 
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede crear cursos';
+    end if;
+    if p_numero is null or trim(p_numero) = '' or p_grado is null or p_aniolectivo is null then
+        signal sqlstate '45000' set message_text = 'Todos los campos del curso son obligatorios';
+    end if;
+    if not exists (select 1 from jornada where idjornada = p_idjornada) then
+        signal sqlstate '45000' set message_text = 'La jornada no existe';
+    end if;
+ 
+    select concat(trim(p_numero), ' - ', nombre) into v_nombre
+    from jornada where idjornada = p_idjornada;
+ 
+    if exists (select 1 from curso where nombre = v_nombre and aniolectivo = p_aniolectivo) then
+        signal sqlstate '45000' set message_text = 'Curso ya existente';
+    end if;
+ 
+    -- El rango del grado (1 a 11) lo valida el CHECK ck_cursogrado
+    insert into curso (nombre, grado, aniolectivo, activo)
+    values (v_nombre, p_grado, p_aniolectivo, true);
+ 
+    select 'Curso registrado exitosamente' as mensaje, last_insert_id() as idcurso, v_nombre as curso;
+end //
+
+ 
+-- Filtrar cursos por nivel y jornada
+drop procedure if exists sp_rqf014_filtrar_cursos;
+delimiter //
+create procedure sp_rqf014_filtrar_cursos(in p_idnivel int, in p_idjornada int)
+begin
+    if not exists (select 1 from nivel where idnivel = p_idnivel) then
+        signal sqlstate '45000' set message_text = 'El nivel no existe';
+    end if;
+    if not exists (select 1 from jornada where idjornada = p_idjornada) then
+        signal sqlstate '45000' set message_text = 'La jornada no existe';
+    end if;
+ 
+    select idcurso, curso, grado, aniolectivo, estudiantes_activos
+    from vw_cursos_clasificados
+    where idnivel = p_idnivel and idjornada = p_idjornada and activo = true
+    order by grado, curso;
+end //
+ 
+-- Seleccionar curso  +  Consultar estudiantes del curso
+drop procedure if exists sp_rqf015_seleccionar_curso;
+delimiter //
+create procedure sp_rqf015_seleccionar_curso(in p_idcurso int)
+begin
+    if not exists (select 1 from curso where idcurso = p_idcurso) then
+        signal sqlstate '45000' set message_text = 'El curso no existe';
+    end if;
+    if (select activo from curso where idcurso = p_idcurso) = false then
+        signal sqlstate '45000' set message_text = 'El curso está inactivo';
+    end if;
+ 
+    select * from vw_cursos_clasificados where idcurso = p_idcurso;
+ 
+    if not exists (select 1 from vw_estudiantes_curso where idcurso = p_idcurso) then
+        select 'El curso no tiene estudiantes activos' as mensaje;
+    else
+        select idestudiante, numerodocumentoEst, apellidos, nombres, acudiente, telefono_acudiente
+        from vw_estudiantes_curso
+        where idcurso = p_idcurso
+        order by apellidos, nombres;
+    end if;
+end //
+
+ 
+-- RQF-017 Configurar bloques horarios  El nombre se arma con el formato de los datos: 'Bloque N - Nivel - Jornada'. Como bloque.nombre es UNIQUE, el número queda único por nivel y jornada. Horario y tope de bloques: trg_bloque_bi.
+drop procedure if exists sp_rqf017_configurar_bloque;
+delimiter //
+create procedure sp_rqf017_configurar_bloque(
+    in p_idusuario int,
+    in p_numero    int,
+    in p_inicio    time,
+    in p_fin       time,
+    in p_idnivel   int,
+    in p_idjornada int)
+begin
+    declare v_nombre varchar(50);
+ 
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede configurar bloques';
+    end if;
+    if p_numero is null or p_inicio is null or p_fin is null then
+        signal sqlstate '45000' set message_text = 'Todos los campos del bloque son obligatorios';
+    end if;
+    if not exists (select 1 from nivel where idnivel = p_idnivel) then
+        signal sqlstate '45000' set message_text = 'El nivel no existe';
+    end if;
+    if not exists (select 1 from jornada where idjornada = p_idjornada) then
+        signal sqlstate '45000' set message_text = 'La jornada no existe';
+    end if;
+    if p_numero <= 0 then
+        signal sqlstate '45000' set message_text = 'El número del bloque debe ser mayor que 0';
+    end if;
+    if p_fin <= p_inicio then
+        signal sqlstate '45000' set message_text = 'La hora de finalización debe ser posterior a la hora de inicio';
+    end if;
+ 
+    select concat('Bloque ', p_numero, ' - ', n.nombre, ' - ', j.nombre) into v_nombre
+    from nivel n, jornada j
+    where n.idnivel = p_idnivel and j.idjornada = p_idjornada;
+ 
+    if exists (select 1 from bloque where nombre = v_nombre) then
+        signal sqlstate '45000' set message_text = 'Ya existe un bloque con ese número para el nivel y la jornada';
+    end if;
+ 
+    insert into bloque (nombre, numero, horainicioBlo, horafinBlo)
+    values (v_nombre, p_numero, p_inicio, p_fin);
+ 
+    select 'Bloque registrado exitosamente' as mensaje, last_insert_id() as idbloque, v_nombre as bloque;
+end //
+ 
+-- Filtrar bloques por nivel y jornada 
+drop procedure if exists sp_rqf018_filtrar_bloques;
+delimiter //
+create procedure sp_rqf018_filtrar_bloques(in p_idnivel int, in p_idjornada int)
+begin
+    if not exists (select 1 from nivel where idnivel = p_idnivel) then
+        signal sqlstate '45000' set message_text = 'El nivel no existe';
+    end if;
+    if not exists (select 1 from jornada where idjornada = p_idjornada) then
+        signal sqlstate '45000' set message_text = 'La jornada no existe';
+    end if;
+ 
+    select idbloque, bloque, numero, horainicioBlo, horafinBlo
+    from vw_bloques_clasificados
+    where idnivel = p_idnivel and idjornada = p_idjornada
+    order by numero;
+end //
+
+ 
+-- Seleccionar bloque horario -
+drop procedure if exists sp_rqf019_seleccionar_bloque;
+delimiter //
+create procedure sp_rqf019_seleccionar_bloque(in p_idbloque int)
+begin
+    if not exists (select 1 from bloque where idbloque = p_idbloque) then
+        signal sqlstate '45000' set message_text = 'El bloque no existe';
+    end if;
+ 
+    select * from vw_bloques_clasificados where idbloque = p_idbloque;
+end //
+
+ 
+--  Registrar acudiente 
+drop procedure if exists sp_rqf020_registrar_acudiente;
+delimiter //
+create procedure sp_rqf020_registrar_acudiente(
+    in p_idusuario  int,
+    in p_tipodoc    varchar(5),
+    in p_numdoc     varchar(20),
+    in p_nombres    varchar(60),
+    in p_apellidos  varchar(60),
+    in p_parentesco varchar(30),
+    in p_telefono   varchar(15),
+    in p_correo     varchar(100),
+    in p_direccion  varchar(120))
+begin
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede registrar acudientes';
+    end if;
+    if p_tipodoc is null or p_numdoc is null or p_nombres is null or p_apellidos is null
+       or p_parentesco is null or p_telefono is null then
+        signal sqlstate '45000' set message_text = 'Faltan datos obligatorios del acudiente';
+    end if;
+    if exists (select 1 from acudiente where numerodocumentoAcu = p_numdoc) then
+        signal sqlstate '45000' set message_text = 'Acudiente ya existente';
+    end if;
+ 
+    insert into acudiente (tipodocumentoAcu, numerodocumentoAcu, nombres, apellidos,
+                           parentesco, telefono, correo, direccion)
+    values (p_tipodoc, p_numdoc, p_nombres, p_apellidos,
+            p_parentesco, p_telefono, p_correo, p_direccion);
+ 
+    select 'Acudiente registrado exitosamente' as mensaje, last_insert_id() as idacudiente;
+end//
+
+ 
+-- Registrar estudiante, El esquema asocia al estudiante con su acudiente (FK idacudiente).El curso no se guarda en estudiante: queda en cada registro de asistencia.
+drop procedure if exists sp_rqf021_registrar_estudiante;
+delimiter //
+create procedure sp_rqf021_registrar_estudiante(
+    in p_idusuario   int,
+    in p_tipodoc     varchar(5),
+    in p_numdoc      varchar(20),
+    in p_nombres     varchar(60),
+    in p_apellidos   varchar(60),
+    in p_fechanac    date,
+    in p_idacudiente int)
+begin
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede registrar estudiantes';
+    end if;
+    if p_tipodoc is null or p_numdoc is null or p_nombres is null
+       or p_apellidos is null or p_fechanac is null then
+        signal sqlstate '45000' set message_text = 'Faltan datos obligatorios del estudiante';
+    end if;
+    if exists (select 1 from estudiante where numerodocumentoEst = p_numdoc) then
+        signal sqlstate '45000' set message_text = 'Estudiante ya existente';
+    end if;
+    if not exists (select 1 from acudiente where idacudiente = p_idacudiente) then
+        signal sqlstate '45000' set message_text = 'El acudiente no existe';
+    end if;
+ 
+    insert into estudiante (tipodocumentoEst, numerodocumentoEst, nombres, apellidos,
+                            fechanacimiento, activo, idacudiente)
+    values (p_tipodoc, p_numdoc, p_nombres, p_apellidos, p_fechanac, true, p_idacudiente);
+ 
+    select 'Estudiante registrado exitosamente' as mensaje, last_insert_id() as idestudiante;
+end //
+
+ 
+-- Actualizar información (NULL = ese dato no se cambia)
+drop procedure if exists sp_rqf023_actualizar_acudiente;
+delimiter //
+create procedure sp_rqf023_actualizar_acudiente(
+    in p_idusuario   int,
+    in p_idacudiente int,
+    in p_telefono    varchar(15),
+    in p_correo      varchar(100),
+    in p_direccion   varchar(120))
+begin
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede modificar acudientes';
+    end if;
+    if not exists (select 1 from acudiente where idacudiente = p_idacudiente) then
+        signal sqlstate '45000' set message_text = 'El acudiente no existe';
+    end if;
+ 
+    update acudiente
+    set telefono  = coalesce(p_telefono,  telefono),
+        correo    = coalesce(p_correo,    correo),
+        direccion = coalesce(p_direccion, direccion)
+    where idacudiente = p_idacudiente;
+ 
+    select 'Datos del acudiente actualizados' as mensaje;
+end //
+ 
+drop procedure if exists sp_rqf023_actualizar_estudiante;
+delimiter //
+create procedure sp_rqf023_actualizar_estudiante(
+    in p_idusuario    int,
+    in p_idestudiante int,
+    in p_nombres      varchar(60),
+    in p_apellidos    varchar(60),
+    in p_fechanac     date,
+    in p_idacudiente  int)
+begin
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede modificar estudiantes';
+    end if;
+    if not exists (select 1 from estudiante where idestudiante = p_idestudiante) then
+        signal sqlstate '45000' set message_text = 'El estudiante no existe';
+    end if;
+    if p_idacudiente is not null
+       and not exists (select 1 from acudiente where idacudiente = p_idacudiente) then
+        signal sqlstate '45000' set message_text = 'El acudiente no existe';
+    end if;
+ 
+    update estudiante
+    set nombres         = coalesce(p_nombres,     nombres),
+        apellidos       = coalesce(p_apellidos,   apellidos),
+        fechanacimiento = coalesce(p_fechanac,    fechanacimiento),
+        idacudiente     = coalesce(p_idacudiente, idacudiente)
+    where idestudiante = p_idestudiante;
+ 
+    select 'Datos del estudiante actualizados' as mensaje;
+end//
+
+ 
+-- RQF-022 / RQF-024 Asignar y cambiar curso  No hay columna donde guardar la asignación: el curso del estudiante se registra en asistencia.idcurso. Este procedimiento CONSULTA la
+-- trayectoria del estudiante: en qué cursos tiene registros y cuál es el actual. Así se verifica que un cambio de curso conserva el historial.
+drop procedure if exists sp_rqf024_consultar_cursos_estudiante;
+delimiter //
+create procedure sp_rqf024_consultar_cursos_estudiante(in p_idestudiante int)
+begin
+    if not exists (select 1 from estudiante where idestudiante = p_idestudiante) then
+        signal sqlstate '45000' set message_text = 'El estudiante no existe';
+    end if;
+ 
+    select * from vw_estudiante_curso_actual where idestudiante = p_idestudiante;
+ 
+    select c.curso, c.nivel, c.jornada,
+           min(a.fecha) as desde, max(a.fecha) as hasta, count(*) as registros
+    from asistencia a
+    join vw_cursos_clasificados c on c.idcurso = a.idcurso
+    where a.idestudiante = p_idestudiante
+    group by c.idcurso, c.curso, c.nivel, c.jornada
+    order by desde;
+end //
+ 
+--  Cambiar estado del estudiante 
+drop procedure if exists sp_rqf025_cambiar_estado_estudiante;
+delimiter //
+create procedure sp_rqf025_cambiar_estado_estudiante(
+    in p_idusuario int, in p_idestudiante int, in p_activo boolean)
+begin
+    call sp_rqf008_controlar_acceso(p_idusuario, 'COORDINADOR', @acceso);
+    if not @acceso then
+        signal sqlstate '45000' set message_text = 'Solo un coordinador activo puede cambiar el estado de un estudiante';
+    end if;
+    if not exists (select 1 from estudiante where idestudiante = p_idestudiante) then
+        signal sqlstate '45000' set message_text = 'El estudiante no existe';
+    end if;
+    if (select activo from estudiante where idestudiante = p_idestudiante) = p_activo then
+        signal sqlstate '45000' set message_text = 'El estudiante ya tiene ese estado';
+    end if;
+ 
+    update estudiante set activo = p_activo where idestudiante = p_idestudiante;
+ 
+    select if(p_activo, 'Estudiante activado',
+              'Estudiante desactivado. Su historial se conserva') as mensaje;
+end //
+
+-- Consulta de acudiente y sus estudiantes 
+drop procedure if exists sp_rqf020_consultar_acudiente;
+delimiter //
+create procedure sp_rqf020_consultar_acudiente(in p_numdoc varchar(20))
+begin
+    if not exists (select 1 from acudiente where numerodocumentoAcu = p_numdoc) then
+        signal sqlstate '45000' set message_text = 'El acudiente no existe';
+    end if;
+ 
+    select * from vw_acudiente_estudiantes where numerodocumentoAcu = p_numdoc;
+end //
+ 
+-- 5. CONSULTAS
+
+-- 5.1 Jornadas con cantidad de cursos y bloques
+select j.nombre as jornada, j.horainicioJor, j.horafinJor,
+       (select count(*) from vw_cursos_clasificados c where c.idjornada = j.idjornada) as cursos,
+       (select count(*) from vw_bloques_clasificados b where b.idjornada = j.idjornada) as bloques
+from jornada j;
+ 
+-- 5.2  Bloques configurados vs. bloques esperados por nivel y jornada
+select n.nombre as nivel, j.nombre as jornada, n.cantidadbloques as esperados,
+       count(b.idbloque) as configurados
+from nivel n
+cross join jornada j
+left join vw_bloques_clasificados b on b.idnivel = n.idnivel and b.idjornada = j.idjornada
+group by n.idnivel, n.nombre, j.idjornada, j.nombre, n.cantidadbloques;
+ 
+-- 5.3  Cursos de bachillerato en la jornada tarde
+select curso, grado, estudiantes_activos
+from vw_cursos_clasificados
+where nivel = 'Bachillerato' and jornada = 'Tarde' and activo = true
+order by grado, curso;
+ 
+-- 5.4  Cursos sin estudiantes activos
+select curso, nivel, jornada
+from vw_cursos_clasificados
+where estudiantes_activos = 0 and activo = true;
+ 
+-- 5.5  Horario de bloques de primaria en la jornada mañana
+select numero, bloque, horainicioBlo, horafinBlo
+from vw_bloques_clasificados
+where nivel = 'Primaria' and jornada = 'Mañana'
+order by numero;
+ 
+-- 5.6  Acudientes con más de un estudiante a cargo
+select numerodocumentoAcu, acudiente, count(idestudiante) as estudiantes
+from vw_acudiente_estudiantes
+group by idacudiente, numerodocumentoAcu, acudiente
+having count(idestudiante) > 1;
+ 
+-- 5.7  Estudiantes registrados que aún no tienen curso
+--     (no tienen ningún registro de asistencia)
+select e.numerodocumentoEst, concat(e.nombres, ' ', e.apellidos) as estudiante
+from estudiante e
+where not exists (select 1 from asistencia a where a.idestudiante = e.idestudiante);
+ 
+-- 5.8 Estudiantes inactivos y cuántos registros de asistencia conservan
+select ec.numerodocumentoEst, concat(ec.nombres, ' ', ec.apellidos) as estudiante,
+       c.curso as ultimo_curso,
+       (select count(*) from asistencia a where a.idestudiante = ec.idestudiante) as registros
+from vw_estudiante_curso_actual ec
+join vw_cursos_clasificados c on c.idcurso = ec.idcurso
+where ec.activo = false;
+     
+-- MODULO 3
 -- rqf 029. registrar justificación
-
 DELIMITER $$
 create procedure sp_registrar_justificacion(
     in p_idasistencia int,
