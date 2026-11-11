@@ -1,0 +1,1772 @@
+drop database if exists colegio_mzo;
+create database colegio_mzo;
+use colegio_mzo;
+
+create table jornada (
+    idjornada int primary key auto_increment not null,
+    nombre varchar(20) unique not null,
+    horainicioJor time not null,
+    horafinJor time not null,
+    constraint ck_jornadahoras check (horafinJor > horainicioJor)
+);
+
+create table nivel (
+    idnivel int primary key auto_increment not null,
+    nombre varchar(30) unique not null,
+    cantidadbloques int not null,
+    constraint ck_nivelbloques check (cantidadbloques > 0)
+);
+
+create table curso (
+    idcurso int primary key auto_increment not null,
+    nombre varchar(20) not null,
+    grado int not null,
+    aniolectivo year not null,
+    activo boolean not null default true,
+    constraint uq_curso unique (nombre, aniolectivo),
+    constraint ck_cursogrado check (grado between 1 and 11)
+);
+
+create table bloque (
+    idbloque int primary key auto_increment not null,
+    nombre varchar(50) not null,
+    numero int not null,
+    horainicioBlo time not null,
+    horafinBlo time not null,
+    constraint uq_bloque unique (nombre),
+    constraint ck_bloquenumero check (numero > 0),
+    constraint ck_bloquehoras check (horafinBlo > horainicioBlo)
+);
+
+create table acudiente (
+    idacudiente int primary key auto_increment not null,
+    tipodocumentoAcu varchar(5) not null,
+    numerodocumentoAcu varchar(20) unique not null,
+    nombres varchar(60) not null,
+    apellidos varchar(60) not null,
+    parentesco varchar(30) not null,
+    telefono varchar(15) not null,
+    correo varchar(100) null,
+    direccion varchar(120) null
+);
+
+
+create table estudiante (
+    idestudiante int primary key auto_increment not null,
+    tipodocumentoEst varchar(5) not null,
+    numerodocumentoEst varchar(20) unique not null,
+    nombres varchar(60) not null,
+    apellidos varchar(60) not null,
+    fechanacimiento date not null,
+    activo boolean not null default true,
+    idacudiente int not null,
+    constraint fk_estudianteacudiente foreign key (idacudiente) references acudiente (idacudiente)
+);
+
+create table usuario (
+    idusuario int primary key auto_increment not null,
+    numerodocumentoUsu varchar(20) unique not null,
+    nombres varchar(60) not null,
+    apellidos varchar(60) not null,
+    correo varchar(100) unique not null,
+    contrasena varchar(255) not null,
+    rol enum('COORDINADOR','MAESTRO') not null,
+    activo boolean not null default true,
+    constraint uq_usuario unique (numerodocumentoUsu, correo)
+);
+
+create table citacion (
+    idcitacion int primary key auto_increment not null,
+    fechacitacion date not null,
+    motivo varchar(255) not null,
+    estado enum('PENDIENTE','REALIZADA') not null default 'PENDIENTE',
+    fecharegistro datetime not null default current_timestamp
+);
+
+create table asistencia (
+    idasistencia int primary key auto_increment not null,
+    fecha date not null,
+    categoria enum('ASISTIO','FALTO','RETARDO','EVASION') not null,
+    justificada boolean not null default false,
+    justificacion enum('CALAMIDAD','MEDICA','PERMITIDA','NINGUNA') not null default 'NINGUNA',
+    fecha_hora_registro datetime not null default current_timestamp,
+    idestudiante int not null,
+    idcurso int not null,
+    idbloque int not null,
+    idnivel int not null,
+    idjornada int not null,
+    idusuario int not null,
+    idcitacion int null,
+    constraint uq_asistencia unique (fecha, idestudiante, idbloque),
+    constraint ck_asistenciajustificacion check (
+        (justificada = false and justificacion = 'NINGUNA')
+        or (justificada = true and justificacion <> 'NINGUNA' and categoria <> 'ASISTIO')),
+    constraint fk_asistencia_estudiante foreign key (idestudiante) references estudiante (idestudiante),
+    constraint fk_asistencia_curso foreign key (idcurso) references curso (idcurso),
+    constraint fk_asistencia_bloque foreign key (idbloque) references bloque (idbloque),
+    constraint fk_asistencia_nivel foreign key (idnivel) references nivel (idnivel),
+    constraint fk_asistencia_jornada foreign key (idjornada) references jornada (idjornada),
+    constraint fk_asistencia_usuario foreign key (idusuario) references usuario (idusuario),
+    constraint fk_asistencia_citacion foreign key (idcitacion) references citacion (idcitacion)
+        on delete set null
+);
+
+create table auditoria_asistencia (
+    idauditoria int not null auto_increment,
+    accion enum('MODIFICAR','ELIMINAR') not null,
+    campomodificado varchar(50) not null,
+    valoranterior varchar(255) null,
+    valornuevo varchar(255) null,
+    motivo varchar(255) not null,
+    fechahora datetime not null default current_timestamp,
+    idasistencia int not null,
+    constraint pk_auditoria primary key (idauditoria),
+    constraint fk_auditoria_asistencia foreign key (idasistencia) references asistencia (idasistencia)
+);
+
+create index ix_asistencia_fecha     on asistencia (fecha);
+create index ix_asistencia_categoria on asistencia (categoria);
+create index ix_auditoria_fechahora on auditoria_asistencia (fechahora);
+
+use colegio_mzo;
+
+insert into jornada (nombre, horainicioJor, horafinJor) values -- no podemos tener 50 registros porque el colegio solo maneja jornada mañana y tarde
+  ('Mañana', '06:30:00', '12:30:00'),
+  ('Tarde', '12:30:00', '18:30:00');
+
+insert into nivel (nombre, cantidadbloques) values -- lo mismo aqui, el colegio solo maneja nivel primaria y bachillerato
+  ('Primaria', 5),
+  ('Bachillerato', 4);
+
+insert into bloque (nombre, numero, horainicioBlo, horafinBlo) values
+  -- Primaria - Mañana
+  ('Bloque 1 - Primaria - Mañana', 1, '06:30:00', '07:25:00'),
+  ('Bloque 2 - Primaria - Mañana', 2, '07:25:00', '08:20:00'),
+  ('Bloque 3 - Primaria - Mañana', 3, '08:40:00', '09:35:00'),
+  ('Bloque 4 - Primaria - Mañana', 4, '09:35:00', '10:30:00'),
+  ('Bloque 5 - Primaria - Mañana', 5, '10:30:00', '11:25:00'),
+  -- Primaria - Tarde
+  ('Bloque 1 - Primaria - Tarde', 1, '12:30:00', '13:25:00'),
+  ('Bloque 2 - Primaria - Tarde', 2, '13:25:00', '14:20:00'),
+  ('Bloque 3 - Primaria - Tarde', 3, '14:40:00', '15:35:00'),
+  ('Bloque 4 - Primaria - Tarde', 4, '15:35:00', '16:30:00'),
+  ('Bloque 5 - Primaria - Tarde', 5, '16:30:00', '17:25:00'),
+  -- Bachillerato - Mañana
+  ('Bloque 1 - Bachillerato - Mañana', 1, '06:30:00', '07:25:00'),
+  ('Bloque 2 - Bachillerato - Mañana', 2, '07:25:00', '08:20:00'),
+  ('Bloque 3 - Bachillerato - Mañana', 3, '08:40:00', '09:35:00'),
+  ('Bloque 4 - Bachillerato - Mañana', 4, '09:35:00', '10:30:00'),
+  -- Bachillerato - Tarde
+  ('Bloque 1 - Bachillerato - Tarde', 1, '12:30:00', '13:25:00'),
+  ('Bloque 2 - Bachillerato - Tarde', 2, '13:25:00', '14:20:00'),
+  ('Bloque 3 - Bachillerato - Tarde', 3, '14:40:00', '15:35:00'),
+  ('Bloque 4 - Bachillerato - Tarde', 4, '15:35:00', '16:30:00');
+  
+  insert into curso (nombre, grado, aniolectivo, activo) values
+  -- Jornada Mañana
+  ('101 - Mañana', 1, 2026, true),
+  ('102 - Mañana', 1, 2026, true),
+  ('201 - Mañana', 2, 2026, true),
+  ('202 - Mañana', 2, 2026, true),
+  ('301 - Mañana', 3, 2026, true),
+  ('302 - Mañana', 3, 2026, true),
+  ('401 - Mañana', 4, 2026, true),
+  ('402 - Mañana', 4, 2026, true),
+  ('501 - Mañana', 5, 2026, true),
+  ('502 - Mañana', 5, 2026, true),
+  ('601 - Mañana', 6, 2026, true),
+  ('602 - Mañana', 6, 2026, true),
+  ('701 - Mañana', 7, 2026, true),
+  ('702 - Mañana', 7, 2026, true),
+  ('801 - Mañana', 8, 2026, true),
+  ('802 - Mañana', 8, 2026, true),
+  ('901 - Mañana', 9, 2026, true),
+  ('902 - Mañana', 9, 2026, true),
+  ('1001 - Mañana', 10, 2026, true),
+  ('1002 - Mañana', 10, 2026, true),
+  ('1101 - Mañana', 11, 2026, true),
+  ('1102 - Mañana', 11, 2026, true),
+  ('603 - Mañana', 6, 2026, true),
+  ('703 - Mañana', 7, 2026, true),
+  ('803 - Mañana', 8, 2026, true),
+  -- Jornada Tarde
+  ('101 - Tarde', 1, 2026, true),
+  ('102 - Tarde', 1, 2026, true),
+  ('201 - Tarde', 2, 2026, true),
+  ('202 - Tarde', 2, 2026, true),
+  ('301 - Tarde', 3, 2026, true),
+  ('302 - Tarde', 3, 2026, true),
+  ('401 - Tarde', 4, 2026, true),
+  ('402 - Tarde', 4, 2026, true),
+  ('501 - Tarde', 5, 2026, true),
+  ('502 - Tarde', 5, 2026, true),
+  ('601 - Tarde', 6, 2026, true),
+  ('602 - Tarde', 6, 2026, true),
+  ('701 - Tarde', 7, 2026, true),
+  ('702 - Tarde', 7, 2026, true),
+  ('801 - Tarde', 8, 2026, true),
+  ('802 - Tarde', 8, 2026, true),
+  ('901 - Tarde', 9, 2026, true),
+  ('902 - Tarde', 9, 2026, true),
+  ('1001 - Tarde', 10, 2026, true),
+  ('1002 - Tarde', 10, 2026, true),
+  ('1101 - Tarde', 11, 2026, true),
+  ('1102 - Tarde', 11, 2026, true),
+  ('603 - Tarde', 6, 2026, true),
+  ('703 - Tarde', 7, 2026, true),
+  ('803 - Tarde', 8, 2026, true);
+  
+  insert into acudiente (tipodocumentoAcu, numerodocumentoAcu, nombres, apellidos, parentesco, telefono, correo, direccion) values
+  ('CC', '52000000', 'Gabriela', 'Ortiz Palacios', 'Madre', '3269236009', 'gabriela.ortiz1@correo.com', 'Carrera 58 Sur # 79-80, Kennedy'),
+  ('CC', '52013771', 'Samuel', 'Vargas Sánchez', 'Padre', '3109225646', 'samuel.vargas2@correo.com', 'Calle 8 Sur # 69-13, Kennedy'),
+  ('CC', '52027542', 'Diana', 'Torres Ramírez', 'Tía', '3216710873', 'diana.torres3@correo.com', 'Diagonal 52 Sur # 72-96, Kennedy'),
+  ('CC', '52041313', 'Yolanda', 'Pérez Vargas', 'Abuela', '3158735513', null, 'Diagonal 2 Sur # 87-91, Kennedy'),
+  ('CC', '52055084', 'Mariana', 'Mena Jiménez', 'Hermana mayor', '3277679821', 'mariana.mena5@correo.com', 'Calle 28 Sur # 76-97, Kennedy'),
+  ('CC', '52068855', 'Luis', 'Asprilla Rojas', 'Tutor legal', '3281425740', 'luis.asprilla6@correo.com', null),
+  ('CC', '52082626', 'Manuela', 'Cuesta Gómez', 'Madre', '3018663770', 'manuela.cuesta7@correo.com', 'Transversal 31 Sur # 64-62, Kennedy'),
+  ('CC', '52096397', 'Luz Marina', 'Suárez Torres', 'Tía', '3135938778', 'luz.suarez8@correo.com', 'Transversal 52 Sur # 88-52, Kennedy'),
+  ('CC', '52110168', 'Miguel', 'Gómez García', 'Tutor legal', '3178829190', 'miguel.gomez9@correo.com', 'Transversal 24 Sur # 89-26, Kennedy'),
+  ('CC', '52123939', 'Salomé', 'Quintero Rojas', 'Madre', '3185342466', 'salome.quintero10@correo.com', 'Diagonal 21 Sur # 74-13, Kennedy'),
+  ('CC', '52137710', 'Martina', 'Rojas Cuesta', 'Hermana mayor', '3114264621', null, 'Calle 42 Sur # 68-64, Kennedy'),
+  ('CC', '52151481', 'Wilson', 'García Vargas', 'Padre', '3214335171', 'wilson.garcia12@correo.com', 'Calle 1 Sur # 74-75, Kennedy'),
+  ('CC', '52165252', 'Camila', 'Murillo Suárez', 'Tía', '3299254204', 'camila.murillo13@correo.com', 'Diagonal 10 Sur # 60-41, Kennedy'),
+  ('CC', '52179023', 'Manuela', 'Suárez Sánchez', 'Hermana mayor', '3242416554', 'manuela.suarez14@correo.com', 'Carrera 39 Sur # 88-89, Kennedy'),
+  ('CC', '52192794', 'Martina', 'Perea García', 'Tía', '3237308337', 'martina.perea15@correo.com', 'Transversal 25 Sur # 85-20, Kennedy'),
+  ('CC', '52206565', 'Ana María', 'Torres Mena', 'Madre', '3101429199', 'ana.torres16@correo.com', 'Calle 54 Sur # 71-83, Kennedy'),
+  ('CC', '52220336', 'Carolina', 'Rentería Pérez', 'Hermana mayor', '3119347833', 'carolina.renteria17@correo.com', null),
+  ('CC', '52234107', 'Samuel', 'Mosquera Quintero', 'Abuelo', '3196644171', null, 'Carrera 38 Sur # 76-27, Kennedy'),
+  ('CC', '52247878', 'Sandra', 'Rentería Córdoba', 'Madre', '3001808451', 'sandra.renteria19@correo.com', 'Transversal 3 Sur # 66-83, Kennedy'),
+  ('CC', '52261649', 'Diana', 'Castro Córdoba', 'Madre', '3223690909', 'diana.castro20@correo.com', 'Carrera 42 Sur # 76-28, Kennedy'),
+  ('CC', '52275420', 'Martina', 'Torres Ramírez', 'Hermana mayor', '3126772469', 'martina.torres21@correo.com', 'Transversal 56 Sur # 62-50, Kennedy'),
+  ('CC', '52289191', 'Isabella', 'Castro Murillo', 'Hermana mayor', '3278458863', 'isabella.castro22@correo.com', 'Diagonal 30 Sur # 65-42, Kennedy'),
+  ('CC', '52302962', 'Gabriela', 'Quintero Ramírez', 'Madre', '3157845145', 'gabriela.quintero23@correo.com', 'Carrera 15 Sur # 60-12, Kennedy'),
+  ('CC', '52316733', 'Martina', 'Rodríguez Moreno', 'Abuela', '3232840351', 'martina.rodriguez24@correo.com', 'Diagonal 36 Sur # 81-74, Kennedy'),
+  ('CC', '52330504', 'Luz Marina', 'Suárez Murillo', 'Abuela', '3222702144', null, 'Diagonal 37 Sur # 68-86, Kennedy'),
+  ('CC', '52344275', 'Diego', 'Rojas López', 'Padre', '3019499785', 'diego.rojas26@correo.com', 'Calle 49 Sur # 71-93, Kennedy'),
+  ('CC', '52358046', 'Paula', 'Pérez Perea', 'Tía', '3065312449', 'paula.perez27@correo.com', 'Carrera 17 Sur # 68-9, Kennedy'),
+  ('CC', '52371817', 'Natalia', 'Gómez Martínez', 'Abuela', '3043063938', 'natalia.gomez28@correo.com', null),
+  ('CC', '52385588', 'Valentina', 'Díaz Murillo', 'Hermana mayor', '3238762311', 'valentina.diaz29@correo.com', 'Calle 60 Sur # 72-41, Kennedy'),
+  ('CC', '52399359', 'Ana María', 'Rentería Moreno', 'Tía', '3061397004', 'ana.renteria30@correo.com', 'Transversal 19 Sur # 90-46, Kennedy'),
+  ('CC', '52413130', 'Carolina', 'Pérez Valencia', 'Madre', '3206745925', 'carolina.perez31@correo.com', 'Diagonal 50 Sur # 73-41, Kennedy'),
+  ('CC', '52426901', 'Camila', 'Valencia Martínez', 'Abuela', '3256070765', null, 'Calle 8 Sur # 61-17, Kennedy'),
+  ('CC', '52440672', 'Manuela', 'Moreno Rojas', 'Hermana mayor', '3233100642', 'manuela.moreno33@correo.com', 'Transversal 16 Sur # 84-54, Kennedy'),
+  ('CC', '52454443', 'Natalia', 'Rentería Córdoba', 'Hermana mayor', '3005644462', 'natalia.renteria34@correo.com', 'Diagonal 51 Sur # 64-30, Kennedy'),
+  ('CC', '52468214', 'Sofía', 'Ramírez Díaz', 'Abuela', '3085449700', 'sofia.ramirez35@correo.com', 'Calle 54 Sur # 65-71, Kennedy'),
+  ('CC', '52481985', 'Gabriela', 'Murillo Valencia', 'Tía', '3238894436', 'gabriela.murillo36@correo.com', 'Calle 43 Sur # 86-2, Kennedy'),
+  ('CC', '52495756', 'Sandra', 'Rentería Ortiz', 'Abuela', '3246766126', 'sandra.renteria37@correo.com', 'Transversal 46 Sur # 71-30, Kennedy'),
+  ('CC', '52509527', 'Óscar', 'Moreno Vargas', 'Tutor legal', '3244152477', 'oscar.moreno38@correo.com', 'Transversal 58 Sur # 85-87, Kennedy'),
+  ('CC', '52523298', 'Sofía', 'García Castro', 'Madre', '3187850588', null, null),
+  ('CC', '52537069', 'Matías', 'López González', 'Tío', '3011307902', 'matias.lopez40@correo.com', 'Diagonal 35 Sur # 83-34, Kennedy'),
+  ('CC', '52550840', 'Yolanda', 'Jiménez Gómez', 'Hermana mayor', '3229535601', 'yolanda.jimenez41@correo.com', 'Transversal 35 Sur # 90-67, Kennedy'),
+  ('CC', '52564611', 'Manuela', 'Valencia Torres', 'Tía', '3233721443', 'manuela.valencia42@correo.com', 'Diagonal 20 Sur # 61-95, Kennedy'),
+  ('CC', '52578382', 'Luis', 'Suárez Pérez', 'Tío', '3209053266', 'luis.suarez43@correo.com', 'Carrera 25 Sur # 66-96, Kennedy'),
+  ('CC', '52592153', 'Óscar', 'Quintero Murillo', 'Abuelo', '3021476776', 'oscar.quintero44@correo.com', 'Calle 12 Sur # 70-70, Kennedy'),
+  ('CC', '52605924', 'Santiago', 'Rentería Mena', 'Padre', '3083587483', 'santiago.renteria45@correo.com', 'Diagonal 5 Sur # 71-39, Kennedy'),
+  ('CC', '52619695', 'Sandra', 'García Martínez', 'Tía', '3065405213', null, 'Transversal 7 Sur # 87-94, Kennedy'),
+  ('CC', '52633466', 'Ana María', 'Moreno Castro', 'Hermana mayor', '3176790134', 'ana.moreno47@correo.com', 'Calle 36 Sur # 76-32, Kennedy'),
+  ('CC', '52647237', 'Paula', 'Quintero Castro', 'Tía', '3058257766', 'paula.quintero48@correo.com', 'Diagonal 49 Sur # 81-29, Kennedy'),
+  ('CC', '52661008', 'Carolina', 'Díaz Perea', 'Hermana mayor', '3136847641', 'carolina.diaz49@correo.com', 'Transversal 21 Sur # 65-26, Kennedy'),
+  ('CC', '52674779', 'Óscar', 'Rojas Cuesta', 'Tutor legal', '3028410022', 'oscar.rojas50@correo.com', null);
+
+insert into estudiante (tipodocumentoEst, numerodocumentoEst, nombres, apellidos, fechanacimiento, activo, idacudiente) values
+  ('RC', '1010000000', 'Sebastián', 'Ortiz Rojas', '2019-05-18', true, 1),
+  ('RC', '1010007919', 'Isabella', 'Vargas Díaz', '2019-05-17', true, 2),
+  ('RC', '1010015838', 'Julián', 'Torres Ramírez', '2019-03-16', true, 3),
+  ('RC', '1010023757', 'David', 'Pérez Sánchez', '2019-06-19', true, 4),
+  ('RC', '1010031676', 'Jerónimo', 'Mena Murillo', '2019-03-05', true, 5),
+  ('TI', '1010039595', 'Manuela', 'Asprilla Vargas', '2017-11-21', true, 6),
+  ('TI', '1010047514', 'Valentina', 'Cuesta Suárez', '2017-06-18', true, 7),
+  ('TI', '1010055433', 'Emiliano', 'Suárez Martínez', '2017-12-14', true, 8),
+  ('TI', '1010063352', 'Esteban', 'Gómez Perea', '2017-12-14', true, 9),
+  ('TI', '1010071271', 'Jerónimo', 'Quintero Ortiz', '2017-04-18', true, 10),
+  ('TI', '1010079190', 'Antonella', 'Rojas Gómez', '2015-07-24', true, 11),
+  ('TI', '1010087109', 'Juan', 'García Ramírez', '2015-10-14', true, 12),
+  ('TI', '1010095028', 'Sebastián', 'Murillo Díaz', '2015-10-24', true, 13),
+  ('TI', '1010102947', 'Camilo', 'Suárez Cuesta', '2015-09-01', true, 14),
+  ('TI', '1010110866', 'Esteban', 'Perea Díaz', '2015-01-07', true, 15),
+  ('TI', '1010118785', 'Valeria', 'Torres Palacios', '2014-03-03', true, 16),
+  ('TI', '1010126704', 'David', 'Rentería Díaz', '2014-01-10', true, 17),
+  ('TI', '1010134623', 'Julián', 'Mosquera Ortiz', '2014-05-22', false, 18),
+  ('TI', '1010142542', 'Felipe', 'Rentería González', '2014-10-12', true, 19),
+  ('TI', '1010150461', 'Jerónimo', 'Castro Murillo', '2014-01-06', true, 20),
+  ('TI', '1010158380', 'Sebastián', 'Torres Díaz', '2012-04-22', true, 21),
+  ('TI', '1010166299', 'Alejandro', 'Castro Mosquera', '2012-12-10', true, 22),
+  ('TI', '1010174218', 'Luciana', 'Quintero González', '2012-10-17', true, 23),
+  ('TI', '1010182137', 'Paula', 'Rodríguez Rentería', '2012-10-28', true, 24),
+  ('TI', '1010190056', 'Matías', 'Suárez Rodríguez', '2012-05-18', true, 25),
+  ('TI', '1010197975', 'Santiago', 'Rojas López', '2010-10-09', true, 26),
+  ('TI', '1010205894', 'Daniel', 'Pérez Perea', '2010-08-30', true, 27),
+  ('TI', '1010213813', 'Emiliano', 'Gómez Díaz', '2010-06-27', true, 28),
+  ('TI', '1010221732', 'Camila', 'Díaz Ramírez', '2010-09-08', true, 29),
+  ('TI', '1010229651', 'David', 'Rentería Gómez', '2010-11-26', true, 30),
+  ('TI', '1010237570', 'Valentina', 'Pérez Castro', '2018-07-07', true, 31),
+  ('TI', '1010245489', 'Natalia', 'Valencia Hernández', '2018-07-08', true, 32),
+  ('TI', '1010253408', 'Laura', 'Moreno Pérez', '2018-04-22', true, 33),
+  ('TI', '1010261327', 'Camilo', 'Rentería Asprilla', '2018-02-03', true, 34),
+  ('TI', '1010269246', 'Mateo', 'Ramírez Rentería', '2018-09-30', true, 35),
+  ('TI', '1010277165', 'Tomás', 'Murillo Castro', '2013-11-12', true, 36),
+  ('TI', '1010285084', 'Paula', 'Rentería Ortiz', '2013-11-02', true, 37),
+  ('TI', '1010293003', 'Antonella', 'Moreno Rentería', '2013-06-23', true, 38),
+  ('TI', '1010300922', 'Sofía', 'García Suárez', '2013-03-31', true, 39),
+  ('TI', '1010308841', 'Mateo', 'López Ortiz', '2013-07-16', true, 40),
+  ('TI', '1010316760', 'Diego', 'Jiménez Hernández', '2011-01-15', true, 41),
+  ('TI', '1010324679', 'Daniela', 'Valencia Rojas', '2011-09-18', false, 42),
+  ('TI', '1010332598', 'Sebastián', 'Suárez Ortiz', '2011-04-19', true, 43),
+  ('TI', '1010340517', 'David', 'Quintero Murillo', '2011-09-08', true, 44),
+  ('TI', '1010348436', 'Antonella', 'Rentería Moreno', '2011-11-30', true, 45),
+  ('TI', '1010356355', 'Martina', 'García Valencia', '2009-10-04', true, 46),
+  ('TI', '1010364274', 'Martina', 'Moreno Suárez', '2009-12-27', true, 47),
+  ('TI', '1010372193', 'Sebastián', 'Quintero García', '2009-12-03', true, 48),
+  ('TI', '1010380112', 'Santiago', 'Ortiz Ramírez', '2009-06-03', true, 1),
+  ('TI', '1010388031', 'Nicolás', 'Vargas García', '2009-05-17', true, 2);
+  
+  insert into usuario (numerodocumentoUsu, nombres, apellidos, correo, contrasena, rol, activo) values
+  ('79000000', 'Luis', 'Moreno García', 'luis.moreno1@colegiomzo.edu.co', sha2('Clave01*', 256), 'COORDINADOR', true),
+  ('79010007', 'Gabriela', 'Córdoba Gómez', 'gabriela.cordoba2@colegiomzo.edu.co', sha2('Clave02*', 256), 'COORDINADOR', true),
+  ('79020014', 'Jorge', 'García Rojas', 'jorge.garcia3@colegiomzo.edu.co', sha2('Clave03*', 256), 'COORDINADOR', true),
+  ('79030021', 'Esteban', 'Perea Suárez', 'esteban.perea4@colegiomzo.edu.co', sha2('Clave04*', 256), 'COORDINADOR', true),
+  ('79040028', 'Tomás', 'Sánchez Ortiz', 'tomas.sanchez5@colegiomzo.edu.co', sha2('Clave05*', 256), 'COORDINADOR', true),
+  ('79050035', 'Ana María', 'González Vargas', 'ana.gonzalez6@colegiomzo.edu.co', sha2('Clave06*', 256), 'MAESTRO', true),
+  ('79060042', 'Camilo', 'García Mena', 'camilo.garcia7@colegiomzo.edu.co', sha2('Clave07*', 256), 'MAESTRO', true),
+  ('79070049', 'Luz Marina', 'Ortiz Gómez', 'luz.ortiz8@colegiomzo.edu.co', sha2('Clave08*', 256), 'MAESTRO', true),
+  ('79080056', 'Mariana', 'Martínez Moreno', 'mariana.martinez9@colegiomzo.edu.co', sha2('Clave09*', 256), 'MAESTRO', true),
+  ('79090063', 'Luis', 'Córdoba Cuesta', 'luis.cordoba10@colegiomzo.edu.co', sha2('Clave10*', 256), 'MAESTRO', true),
+  ('79100070', 'Emiliano', 'Murillo Rodríguez', 'emiliano.murillo11@colegiomzo.edu.co', sha2('Clave11*', 256), 'MAESTRO', true),
+  ('79110077', 'Daniela', 'Asprilla Cuesta', 'daniela.asprilla12@colegiomzo.edu.co', sha2('Clave12*', 256), 'MAESTRO', true),
+  ('79120084', 'Sandra', 'Rojas Hernández', 'sandra.rojas13@colegiomzo.edu.co', sha2('Clave13*', 256), 'MAESTRO', true),
+  ('79130091', 'Nicolás', 'Sánchez Sánchez', 'nicolas.sanchez14@colegiomzo.edu.co', sha2('Clave14*', 256), 'MAESTRO', true),
+  ('79140098', 'Esteban', 'Hernández Moreno', 'esteban.hernandez15@colegiomzo.edu.co', sha2('Clave15*', 256), 'MAESTRO', true),
+  ('79150105', 'Juliana', 'Valencia Rojas', 'juliana.valencia16@colegiomzo.edu.co', sha2('Clave16*', 256), 'MAESTRO', true),
+  ('79160112', 'María José', 'Córdoba Hernández', 'maria.cordoba17@colegiomzo.edu.co', sha2('Clave17*', 256), 'MAESTRO', true),
+  ('79170119', 'Carlos', 'Valencia Vargas', 'carlos.valencia18@colegiomzo.edu.co', sha2('Clave18*', 256), 'MAESTRO', true),
+  ('79180126', 'Jerónimo', 'Mosquera Castro', 'jeronimo.mosquera19@colegiomzo.edu.co', sha2('Clave19*', 256), 'MAESTRO', true),
+  ('79190133', 'Daniela', 'Valencia Hernández', 'daniela.valencia20@colegiomzo.edu.co', sha2('Clave20*', 256), 'MAESTRO', true),
+  ('79200140', 'Sofía', 'Moreno Córdoba', 'sofia.moreno21@colegiomzo.edu.co', sha2('Clave21*', 256), 'MAESTRO', true),
+  ('79210147', 'Luis', 'López Martínez', 'luis.lopez22@colegiomzo.edu.co', sha2('Clave22*', 256), 'MAESTRO', true),
+  ('79220154', 'Diana', 'Rojas Hernández', 'diana.rojas23@colegiomzo.edu.co', sha2('Clave23*', 256), 'MAESTRO', true),
+  ('79230161', 'Camilo', 'Rodríguez Suárez', 'camilo.rodriguez24@colegiomzo.edu.co', sha2('Clave24*', 256), 'MAESTRO', true),
+  ('79240168', 'Carlos', 'Mena Perea', 'carlos.mena25@colegiomzo.edu.co', sha2('Clave25*', 256), 'MAESTRO', true),
+  ('79250175', 'David', 'Pérez Valencia', 'david.perez26@colegiomzo.edu.co', sha2('Clave26*', 256), 'MAESTRO', true),
+  ('79260182', 'Valentina', 'Castro Ortiz', 'valentina.castro27@colegiomzo.edu.co', sha2('Clave27*', 256), 'MAESTRO', true),
+  ('79270189', 'Sara', 'Cuesta Moreno', 'sara.cuesta28@colegiomzo.edu.co', sha2('Clave28*', 256), 'MAESTRO', true),
+  ('79280196', 'Salomé', 'Martínez Quintero', 'salome.martinez29@colegiomzo.edu.co', sha2('Clave29*', 256), 'MAESTRO', true),
+  ('79290203', 'Valeria', 'Moreno Vargas', 'valeria.moreno30@colegiomzo.edu.co', sha2('Clave30*', 256), 'MAESTRO', true),
+  ('79300210', 'Diana', 'Jiménez Gómez', 'diana.jimenez31@colegiomzo.edu.co', sha2('Clave31*', 256), 'MAESTRO', true),
+  ('79310217', 'Jorge', 'Suárez Díaz', 'jorge.suarez32@colegiomzo.edu.co', sha2('Clave32*', 256), 'MAESTRO', true),
+  ('79320224', 'Jorge', 'González Vargas', 'jorge.gonzalez33@colegiomzo.edu.co', sha2('Clave33*', 256), 'MAESTRO', true),
+  ('79330231', 'Ana María', 'Cuesta Quintero', 'ana.cuesta34@colegiomzo.edu.co', sha2('Clave34*', 256), 'MAESTRO', true),
+  ('79340238', 'Paula', 'Martínez Cuesta', 'paula.martinez35@colegiomzo.edu.co', sha2('Clave35*', 256), 'MAESTRO', true),
+  ('79350245', 'Mariana', 'González Jiménez', 'mariana.gonzalez36@colegiomzo.edu.co', sha2('Clave36*', 256), 'MAESTRO', true),
+  ('79360252', 'Paula', 'Perea Vargas', 'paula.perea37@colegiomzo.edu.co', sha2('Clave37*', 256), 'MAESTRO', true),
+  ('79370259', 'Andrés', 'Quintero Palacios', 'andres.quintero38@colegiomzo.edu.co', sha2('Clave38*', 256), 'MAESTRO', true),
+  ('79380266', 'Julián', 'Mosquera Castro', 'julian.mosquera39@colegiomzo.edu.co', sha2('Clave39*', 256), 'MAESTRO', true),
+  ('79390273', 'Salomé', 'Mena Díaz', 'salome.mena40@colegiomzo.edu.co', sha2('Clave40*', 256), 'MAESTRO', true),
+  ('79400280', 'Isabella', 'Torres González', 'isabella.torres41@colegiomzo.edu.co', sha2('Clave41*', 256), 'MAESTRO', true),
+  ('79410287', 'Sara', 'Rodríguez Gómez', 'sara.rodriguez42@colegiomzo.edu.co', sha2('Clave42*', 256), 'MAESTRO', true),
+  ('79420294', 'Samuel', 'Murillo Mosquera', 'samuel.murillo43@colegiomzo.edu.co', sha2('Clave43*', 256), 'MAESTRO', true),
+  ('79430301', 'Yolanda', 'Asprilla Mena', 'yolanda.asprilla44@colegiomzo.edu.co', sha2('Clave44*', 256), 'MAESTRO', true),
+  ('79440308', 'Salomé', 'Pérez Castro', 'salome.perez45@colegiomzo.edu.co', sha2('Clave45*', 256), 'MAESTRO', true),
+  ('79450315', 'Luz Marina', 'Mena Vargas', 'luz.mena46@colegiomzo.edu.co', sha2('Clave46*', 256), 'MAESTRO', true),
+  ('79460322', 'Andrés', 'Sánchez Ortiz', 'andres.sanchez47@colegiomzo.edu.co', sha2('Clave47*', 256), 'MAESTRO', true),
+  ('79470329', 'Emiliano', 'Rojas Gómez', 'emiliano.rojas48@colegiomzo.edu.co', sha2('Clave48*', 256), 'MAESTRO', true),
+  ('79480336', 'Martina', 'López Vargas', 'martina.lopez49@colegiomzo.edu.co', sha2('Clave49*', 256), 'MAESTRO', false),
+  ('79490343', 'Isabella', 'Jiménez Castro', 'isabella.jimenez50@colegiomzo.edu.co', sha2('Clave50*', 256), 'MAESTRO', true);
+  
+insert into citacion (fechacitacion, motivo, estado, fecharegistro) values
+  ('2026-08-07', 'Acumula 3 novedades sin justificar (evasion, falto)', 'REALIZADA', '2026-08-04 17:00:00'),
+  ('2026-08-09', 'Acumula 3 novedades sin justificar (evasion, retardo)', 'PENDIENTE', '2026-08-06 17:00:00'),
+  ('2026-08-08', 'Acumula 3 novedades sin justificar (evasion, falto)', 'PENDIENTE', '2026-08-05 17:00:00'),
+  ('2026-08-09', 'Acumula 3 novedades sin justificar (evasion, falto, retardo)', 'PENDIENTE', '2026-08-06 17:00:00'),
+  ('2026-08-09', 'Acumula 3 novedades sin justificar (evasion, falto)', 'PENDIENTE', '2026-08-06 17:00:00'),
+  ('2026-08-08', 'Seguimiento por retardo reportada por docente', 'PENDIENTE', '2026-08-06 17:30:00'),
+  ('2026-08-06', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-09', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-07 17:30:00'),
+  ('2026-08-07', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-06', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-07', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-06', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-08', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-06 17:30:00'),
+  ('2026-08-05', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-07', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-08', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-06 17:30:00'),
+  ('2026-08-08', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-06 17:30:00'),
+  ('2026-08-05', 'Seguimiento por retardo reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-07', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-05', 'Seguimiento por retardo reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-05', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-07', 'Seguimiento por evasion reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-06', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-07', 'Seguimiento por retardo reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-06', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-07', 'Seguimiento por retardo reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-05', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-06', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-07', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-05 17:30:00'),
+  ('2026-08-06', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-06', 'Seguimiento por retardo reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-06', 'Seguimiento por retardo reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-09', 'Seguimiento por falto reportada por docente', 'PENDIENTE', '2026-08-07 17:30:00'),
+  ('2026-08-09', 'Seguimiento por evasion reportada por docente', 'PENDIENTE', '2026-08-07 17:30:00'),
+  ('2026-08-05', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-06', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-04 17:30:00'),
+  ('2026-08-08', 'Seguimiento por evasion reportada por docente', 'PENDIENTE', '2026-08-06 17:30:00'),
+  ('2026-08-05', 'Seguimiento por falto reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-05', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-03 17:30:00'),
+  ('2026-08-05', 'Seguimiento por evasion reportada por docente', 'REALIZADA', '2026-08-03 17:30:00');
+
+insert into asistencia (fecha, categoria, justificada, justificacion, fecha_hora_registro, idestudiante, idcurso, idbloque, idnivel, idjornada, idusuario, idcitacion) values
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:47:00', 1, 1, 1, 1, 1, 39, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:38:00', 1, 1, 2, 1, 1, 30, null),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 06:42:00', 1, 1, 1, 1, 1, 24, 13),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:43:00', 1, 1, 2, 1, 1, 26, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:46:00', 1, 1, 1, 1, 1, 43, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:44:00', 1, 1, 2, 1, 1, 39, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:48:00', 1, 1, 1, 1, 1, 13, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:38:00', 1, 1, 2, 1, 1, 43, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:42:00', 1, 1, 1, 1, 1, 35, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:36:00', 1, 1, 2, 1, 1, 12, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 06:40:00', 2, 1, 1, 1, 1, 21, 38),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:39:00', 2, 1, 2, 1, 1, 16, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:45:00', 2, 1, 1, 1, 1, 11, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:35:00', 2, 1, 2, 1, 1, 19, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:50:00', 2, 1, 1, 1, 1, 41, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:42:00', 2, 1, 2, 1, 1, 41, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:45:00', 2, 1, 1, 1, 1, 50, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:43:00', 2, 1, 2, 1, 1, 46, null),
+  ('2026-08-07', 'RETARDO', false, 'NINGUNA', '2026-08-07 06:43:00', 2, 1, 1, 1, 1, 47, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:42:00', 2, 1, 2, 1, 1, 9, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:42:00', 3, 1, 1, 1, 1, 47, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:38:00', 3, 1, 2, 1, 1, 6, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:50:00', 3, 1, 1, 1, 1, 8, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:39:00', 3, 1, 2, 1, 1, 10, null),
+  ('2026-08-05', 'RETARDO', false, 'NINGUNA', '2026-08-05 06:42:00', 3, 1, 1, 1, 1, 41, 32),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:44:00', 3, 1, 2, 1, 1, 40, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:40:00', 3, 1, 1, 1, 1, 40, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:43:00', 3, 1, 2, 1, 1, 31, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:43:00', 3, 1, 1, 1, 1, 8, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:41:00', 3, 1, 2, 1, 1, 41, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:50:00', 4, 1, 1, 1, 1, 45, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:38:00', 4, 1, 2, 1, 1, 16, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:48:00', 4, 1, 1, 1, 1, 27, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:45:00', 4, 1, 2, 1, 1, 47, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:41:00', 4, 1, 1, 1, 1, 7, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:37:00', 4, 1, 2, 1, 1, 42, null),
+  ('2026-08-06', 'RETARDO', false, 'NINGUNA', '2026-08-06 06:47:00', 4, 1, 1, 1, 1, 50, 6),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:40:00', 4, 1, 2, 1, 1, 17, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:41:00', 4, 1, 1, 1, 1, 14, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:41:00', 4, 1, 2, 1, 1, 11, null),
+  ('2026-08-03', 'EVASION', false, 'NINGUNA', '2026-08-03 06:46:00', 5, 1, 1, 1, 1, 48, 49),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:43:00', 5, 1, 2, 1, 1, 28, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:50:00', 5, 1, 1, 1, 1, 43, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:39:00', 5, 1, 2, 1, 1, 21, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:43:00', 5, 1, 1, 1, 1, 25, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:44:00', 5, 1, 2, 1, 1, 49, null),
+  ('2026-08-06', 'EVASION', true, 'PERMITIDA', '2026-08-06 06:48:00', 5, 1, 1, 1, 1, 6, null),
+  ('2026-08-06', 'EVASION', false, 'NINGUNA', '2026-08-06 07:37:00', 5, 1, 2, 1, 1, 35, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:43:00', 5, 1, 1, 1, 1, 48, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:37:00', 5, 1, 2, 1, 1, 44, null),
+  ('2026-08-03', 'EVASION', false, 'NINGUNA', '2026-08-03 06:47:00', 6, 5, 1, 1, 1, 13, 25),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:35:00', 6, 5, 2, 1, 1, 45, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:42:00', 6, 5, 1, 1, 1, 32, null),
+  ('2026-08-04', 'EVASION', true, 'PERMITIDA', '2026-08-04 07:39:00', 6, 5, 2, 1, 1, 15, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:50:00', 6, 5, 1, 1, 1, 6, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:36:00', 6, 5, 2, 1, 1, 12, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:45:00', 6, 5, 1, 1, 1, 34, null),
+  ('2026-08-06', 'FALTO', false, 'NINGUNA', '2026-08-06 07:39:00', 6, 5, 2, 1, 1, 34, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 06:44:00', 6, 5, 1, 1, 1, 22, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:44:00', 6, 5, 2, 1, 1, 32, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:45:00', 7, 5, 1, 1, 1, 16, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:43:00', 7, 5, 2, 1, 1, 7, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:44:00', 7, 5, 1, 1, 1, 31, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:45:00', 7, 5, 2, 1, 1, 26, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:41:00', 7, 5, 1, 1, 1, 20, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:44:00', 7, 5, 2, 1, 1, 27, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:46:00', 7, 5, 1, 1, 1, 19, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:39:00', 7, 5, 2, 1, 1, 40, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:46:00', 7, 5, 1, 1, 1, 50, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:42:00', 7, 5, 2, 1, 1, 21, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:44:00', 8, 5, 1, 1, 1, 8, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 07:39:00', 8, 5, 2, 1, 1, 16, 1),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 06:42:00', 8, 5, 1, 1, 1, 34, 1),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 07:45:00', 8, 5, 2, 1, 1, 9, 1),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:40:00', 8, 5, 1, 1, 1, 44, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:43:00', 8, 5, 2, 1, 1, 25, null),
+  ('2026-08-06', 'FALTO', true, 'PERMITIDA', '2026-08-06 06:50:00', 8, 5, 1, 1, 1, 40, 20),
+  ('2026-08-06', 'EVASION', false, 'NINGUNA', '2026-08-06 07:43:00', 8, 5, 2, 1, 1, 24, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 06:49:00', 8, 5, 1, 1, 1, 38, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:40:00', 8, 5, 2, 1, 1, 30, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:40:00', 9, 5, 1, 1, 1, 32, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:41:00', 9, 5, 2, 1, 1, 45, null),
+  ('2026-08-04', 'RETARDO', false, 'NINGUNA', '2026-08-04 06:43:00', 9, 5, 1, 1, 1, 41, 41),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:40:00', 9, 5, 2, 1, 1, 7, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:43:00', 9, 5, 1, 1, 1, 17, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:41:00', 9, 5, 2, 1, 1, 36, null),
+  ('2026-08-06', 'EVASION', true, 'PERMITIDA', '2026-08-06 06:43:00', 9, 5, 1, 1, 1, 29, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:36:00', 9, 5, 2, 1, 1, 12, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:46:00', 9, 5, 1, 1, 1, 13, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:40:00', 9, 5, 2, 1, 1, 46, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:50:00', 10, 5, 1, 1, 1, 12, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:40:00', 10, 5, 2, 1, 1, 25, null),
+  ('2026-08-04', 'RETARDO', true, 'CALAMIDAD', '2026-08-04 06:45:00', 10, 5, 1, 1, 1, 48, 39),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:45:00', 10, 5, 2, 1, 1, 32, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:41:00', 10, 5, 1, 1, 1, 18, null),
+  ('2026-08-05', 'EVASION', false, 'NINGUNA', '2026-08-05 07:42:00', 10, 5, 2, 1, 1, 27, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:41:00', 10, 5, 1, 1, 1, 11, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:37:00', 10, 5, 2, 1, 1, 34, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:41:00', 10, 5, 1, 1, 1, 41, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 07:37:00', 10, 5, 2, 1, 1, 11, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:47:00', 11, 9, 1, 1, 1, 33, null),
+  ('2026-08-03', 'EVASION', true, 'MEDICA', '2026-08-03 07:35:00', 11, 9, 2, 1, 1, 34, 44),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:41:00', 11, 9, 1, 1, 1, 9, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:41:00', 11, 9, 2, 1, 1, 46, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:48:00', 11, 9, 1, 1, 1, 39, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:36:00', 11, 9, 2, 1, 1, 28, null),
+  ('2026-08-06', 'EVASION', true, 'CALAMIDAD', '2026-08-06 06:49:00', 11, 9, 1, 1, 1, 44, null),
+  ('2026-08-06', 'FALTO', false, 'NINGUNA', '2026-08-06 07:41:00', 11, 9, 2, 1, 1, 12, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:45:00', 11, 9, 1, 1, 1, 10, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:45:00', 11, 9, 2, 1, 1, 11, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:49:00', 12, 9, 1, 1, 1, 22, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:44:00', 12, 9, 2, 1, 1, 43, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:49:00', 12, 9, 1, 1, 1, 39, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:41:00', 12, 9, 2, 1, 1, 22, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:49:00', 12, 9, 1, 1, 1, 22, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:39:00', 12, 9, 2, 1, 1, 32, null),
+  ('2026-08-06', 'FALTO', false, 'NINGUNA', '2026-08-06 06:43:00', 12, 9, 1, 1, 1, 43, 19),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:40:00', 12, 9, 2, 1, 1, 39, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:44:00', 12, 9, 1, 1, 1, 25, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:44:00', 12, 9, 2, 1, 1, 21, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:43:00', 13, 9, 1, 1, 1, 44, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:40:00', 13, 9, 2, 1, 1, 46, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:45:00', 13, 9, 1, 1, 1, 31, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:44:00', 13, 9, 2, 1, 1, 35, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:50:00', 13, 9, 1, 1, 1, 12, null),
+  ('2026-08-05', 'EVASION', false, 'NINGUNA', '2026-08-05 07:41:00', 13, 9, 2, 1, 1, 49, 26),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:45:00', 13, 9, 1, 1, 1, 42, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:35:00', 13, 9, 2, 1, 1, 28, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:45:00', 13, 9, 1, 1, 1, 22, null),
+  ('2026-08-07', 'FALTO', true, 'MEDICA', '2026-08-07 07:42:00', 13, 9, 2, 1, 1, 8, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:44:00', 14, 9, 1, 1, 1, 40, null),
+  ('2026-08-03', 'EVASION', false, 'NINGUNA', '2026-08-03 07:36:00', 14, 9, 2, 1, 1, 27, 2),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:46:00', 14, 9, 1, 1, 1, 25, null),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 07:39:00', 14, 9, 2, 1, 1, 6, 2),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:40:00', 14, 9, 1, 1, 1, 10, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:35:00', 14, 9, 2, 1, 1, 29, null),
+  ('2026-08-06', 'RETARDO', false, 'NINGUNA', '2026-08-06 06:48:00', 14, 9, 1, 1, 1, 35, 2),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:44:00', 14, 9, 2, 1, 1, 40, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:49:00', 14, 9, 1, 1, 1, 9, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:36:00', 14, 9, 2, 1, 1, 32, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:41:00', 15, 9, 1, 1, 1, 12, null),
+  ('2026-08-03', 'FALTO', true, 'PERMITIDA', '2026-08-03 07:41:00', 15, 9, 2, 1, 1, 8, 12),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:48:00', 15, 9, 1, 1, 1, 7, null),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 07:41:00', 15, 9, 2, 1, 1, 29, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:47:00', 15, 9, 1, 1, 1, 18, null),
+  ('2026-08-05', 'EVASION', false, 'NINGUNA', '2026-08-05 07:37:00', 15, 9, 2, 1, 1, 23, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:48:00', 15, 9, 1, 1, 1, 16, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:35:00', 15, 9, 2, 1, 1, 10, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:49:00', 15, 9, 1, 1, 1, 32, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 07:45:00', 15, 9, 2, 1, 1, 15, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 06:41:00', 16, 11, 11, 2, 1, 14, 14),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:39:00', 16, 11, 12, 2, 1, 35, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:42:00', 16, 11, 11, 2, 1, 19, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:39:00', 16, 11, 12, 2, 1, 7, null),
+  ('2026-08-05', 'RETARDO', true, 'MEDICA', '2026-08-05 06:41:00', 16, 11, 11, 2, 1, 29, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:36:00', 16, 11, 12, 2, 1, 6, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:50:00', 16, 11, 11, 2, 1, 11, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:38:00', 16, 11, 12, 2, 1, 18, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:41:00', 16, 11, 11, 2, 1, 25, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:36:00', 16, 11, 12, 2, 1, 40, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:43:00', 17, 11, 11, 2, 1, 35, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:37:00', 17, 11, 12, 2, 1, 16, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:48:00', 17, 11, 11, 2, 1, 22, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:41:00', 17, 11, 12, 2, 1, 22, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:47:00', 17, 11, 11, 2, 1, 29, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:37:00', 17, 11, 12, 2, 1, 29, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:50:00', 17, 11, 11, 2, 1, 44, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:39:00', 17, 11, 12, 2, 1, 40, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:48:00', 17, 11, 11, 2, 1, 28, null),
+  ('2026-08-07', 'FALTO', true, 'MEDICA', '2026-08-07 07:42:00', 17, 11, 12, 2, 1, 46, 8),
+  ('2026-08-03', 'RETARDO', false, 'NINGUNA', '2026-08-03 06:42:00', 18, 11, 11, 2, 1, 23, 21),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:36:00', 18, 11, 12, 2, 1, 19, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:44:00', 18, 11, 11, 2, 1, 49, null),
+  ('2026-08-04', 'FALTO', true, 'MEDICA', '2026-08-04 07:39:00', 18, 11, 12, 2, 1, 25, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:40:00', 18, 11, 11, 2, 1, 10, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:41:00', 18, 11, 12, 2, 1, 11, null),
+  ('2026-08-06', 'RETARDO', false, 'NINGUNA', '2026-08-06 06:48:00', 18, 11, 11, 2, 1, 6, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:40:00', 18, 11, 12, 2, 1, 18, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:45:00', 18, 11, 11, 2, 1, 12, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:43:00', 18, 11, 12, 2, 1, 32, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:48:00', 19, 11, 11, 2, 1, 45, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:40:00', 19, 11, 12, 2, 1, 49, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:47:00', 19, 11, 11, 2, 1, 49, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:41:00', 19, 11, 12, 2, 1, 9, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:45:00', 19, 11, 11, 2, 1, 29, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:39:00', 19, 11, 12, 2, 1, 41, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:45:00', 19, 11, 11, 2, 1, 31, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:36:00', 19, 11, 12, 2, 1, 46, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:40:00', 19, 11, 11, 2, 1, 33, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:45:00', 19, 11, 12, 2, 1, 9, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:40:00', 20, 11, 11, 2, 1, 36, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:45:00', 20, 11, 12, 2, 1, 36, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:50:00', 20, 11, 11, 2, 1, 28, null),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 07:38:00', 20, 11, 12, 2, 1, 33, 37),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:43:00', 20, 11, 11, 2, 1, 23, null),
+  ('2026-08-05', 'EVASION', false, 'NINGUNA', '2026-08-05 07:45:00', 20, 11, 12, 2, 1, 6, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:48:00', 20, 11, 11, 2, 1, 36, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:41:00', 20, 11, 12, 2, 1, 47, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:43:00', 20, 11, 11, 2, 1, 50, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:37:00', 20, 11, 12, 2, 1, 25, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 06:46:00', 21, 15, 11, 2, 1, 41, 48),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:36:00', 21, 15, 12, 2, 1, 31, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:45:00', 21, 15, 11, 2, 1, 19, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:44:00', 21, 15, 12, 2, 1, 42, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 06:44:00', 21, 15, 11, 2, 1, 26, null),
+  ('2026-08-05', 'EVASION', true, 'PERMITIDA', '2026-08-05 07:40:00', 21, 15, 12, 2, 1, 41, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:43:00', 21, 15, 11, 2, 1, 23, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:42:00', 21, 15, 12, 2, 1, 17, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:43:00', 21, 15, 11, 2, 1, 25, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:42:00', 21, 15, 12, 2, 1, 35, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:44:00', 22, 15, 11, 2, 1, 24, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:45:00', 22, 15, 12, 2, 1, 8, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:47:00', 22, 15, 11, 2, 1, 27, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:36:00', 22, 15, 12, 2, 1, 30, null),
+  ('2026-08-05', 'RETARDO', false, 'NINGUNA', '2026-08-05 06:45:00', 22, 15, 11, 2, 1, 32, 29),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:45:00', 22, 15, 12, 2, 1, 23, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:40:00', 22, 15, 11, 2, 1, 39, null),
+  ('2026-08-06', 'EVASION', true, 'MEDICA', '2026-08-06 07:44:00', 22, 15, 12, 2, 1, 26, null),
+  ('2026-08-07', 'EVASION', false, 'NINGUNA', '2026-08-07 06:50:00', 22, 15, 11, 2, 1, 23, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:39:00', 22, 15, 12, 2, 1, 16, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:44:00', 23, 15, 11, 2, 1, 36, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:43:00', 23, 15, 12, 2, 1, 10, null),
+  ('2026-08-04', 'FALTO', true, 'MEDICA', '2026-08-04 06:46:00', 23, 15, 11, 2, 1, 6, 27),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:36:00', 23, 15, 12, 2, 1, 45, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:48:00', 23, 15, 11, 2, 1, 50, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:43:00', 23, 15, 12, 2, 1, 6, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:40:00', 23, 15, 11, 2, 1, 8, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:45:00', 23, 15, 12, 2, 1, 14, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:47:00', 23, 15, 11, 2, 1, 9, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 07:36:00', 23, 15, 12, 2, 1, 34, null),
+  ('2026-08-03', 'FALTO', true, 'PERMITIDA', '2026-08-03 06:42:00', 24, 15, 11, 2, 1, 37, 40),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:38:00', 24, 15, 12, 2, 1, 8, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:40:00', 24, 15, 11, 2, 1, 18, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:43:00', 24, 15, 12, 2, 1, 38, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:48:00', 24, 15, 11, 2, 1, 50, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 07:41:00', 24, 15, 12, 2, 1, 10, null),
+  ('2026-08-06', 'RETARDO', false, 'NINGUNA', '2026-08-06 06:43:00', 24, 15, 11, 2, 1, 28, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:35:00', 24, 15, 12, 2, 1, 17, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:48:00', 24, 15, 11, 2, 1, 21, null),
+  ('2026-08-07', 'EVASION', true, 'MEDICA', '2026-08-07 07:35:00', 24, 15, 12, 2, 1, 46, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:40:00', 25, 15, 11, 2, 1, 25, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:38:00', 25, 15, 12, 2, 1, 34, null),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 06:47:00', 25, 15, 11, 2, 1, 12, 46),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:40:00', 25, 15, 12, 2, 1, 17, null),
+  ('2026-08-05', 'FALTO', true, 'CALAMIDAD', '2026-08-05 06:41:00', 25, 15, 11, 2, 1, 14, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:35:00', 25, 15, 12, 2, 1, 38, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:42:00', 25, 15, 11, 2, 1, 44, null),
+  ('2026-08-06', 'EVASION', false, 'NINGUNA', '2026-08-06 07:35:00', 25, 15, 12, 2, 1, 27, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 06:42:00', 25, 15, 11, 2, 1, 43, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:37:00', 25, 15, 12, 2, 1, 19, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:48:00', 26, 19, 11, 2, 1, 10, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 07:38:00', 26, 19, 12, 2, 1, 37, 45),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:42:00', 26, 19, 11, 2, 1, 37, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:36:00', 26, 19, 12, 2, 1, 38, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:45:00', 26, 19, 11, 2, 1, 41, null),
+  ('2026-08-05', 'EVASION', true, 'PERMITIDA', '2026-08-05 07:44:00', 26, 19, 12, 2, 1, 44, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:44:00', 26, 19, 11, 2, 1, 37, null),
+  ('2026-08-06', 'EVASION', false, 'NINGUNA', '2026-08-06 07:42:00', 26, 19, 12, 2, 1, 27, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:48:00', 26, 19, 11, 2, 1, 26, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:41:00', 26, 19, 12, 2, 1, 20, null),
+  ('2026-08-03', 'FALTO', true, 'MEDICA', '2026-08-03 06:46:00', 27, 19, 11, 2, 1, 39, 30),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:40:00', 27, 19, 12, 2, 1, 43, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:44:00', 27, 19, 11, 2, 1, 41, null),
+  ('2026-08-04', 'FALTO', true, 'CALAMIDAD', '2026-08-04 07:42:00', 27, 19, 12, 2, 1, 49, null),
+  ('2026-08-05', 'EVASION', false, 'NINGUNA', '2026-08-05 06:46:00', 27, 19, 11, 2, 1, 22, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:41:00', 27, 19, 12, 2, 1, 31, null),
+  ('2026-08-06', 'FALTO', false, 'NINGUNA', '2026-08-06 06:42:00', 27, 19, 11, 2, 1, 42, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:45:00', 27, 19, 12, 2, 1, 45, null),
+  ('2026-08-07', 'FALTO', true, 'PERMITIDA', '2026-08-07 06:42:00', 27, 19, 11, 2, 1, 25, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:37:00', 27, 19, 12, 2, 1, 7, null),
+  ('2026-08-03', 'FALTO', true, 'CALAMIDAD', '2026-08-03 06:48:00', 28, 19, 11, 2, 1, 20, 28),
+  ('2026-08-03', 'EVASION', false, 'NINGUNA', '2026-08-03 07:35:00', 28, 19, 12, 2, 1, 49, null),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 06:45:00', 28, 19, 11, 2, 1, 8, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:45:00', 28, 19, 12, 2, 1, 13, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:48:00', 28, 19, 11, 2, 1, 43, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:42:00', 28, 19, 12, 2, 1, 6, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:45:00', 28, 19, 11, 2, 1, 13, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:43:00', 28, 19, 12, 2, 1, 9, null),
+  ('2026-08-07', 'FALTO', true, 'PERMITIDA', '2026-08-07 06:50:00', 28, 19, 11, 2, 1, 15, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:37:00', 28, 19, 12, 2, 1, 30, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:46:00', 29, 19, 11, 2, 1, 18, null),
+  ('2026-08-03', 'EVASION', false, 'NINGUNA', '2026-08-03 07:37:00', 29, 19, 12, 2, 1, 35, 33),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 06:40:00', 29, 19, 11, 2, 1, 47, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:36:00', 29, 19, 12, 2, 1, 50, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 06:41:00', 29, 19, 11, 2, 1, 17, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 07:43:00', 29, 19, 12, 2, 1, 28, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 06:47:00', 29, 19, 11, 2, 1, 8, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:37:00', 29, 19, 12, 2, 1, 19, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:49:00', 29, 19, 11, 2, 1, 31, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:40:00', 29, 19, 12, 2, 1, 19, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 06:42:00', 30, 19, 11, 2, 1, 37, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 07:41:00', 30, 19, 12, 2, 1, 26, null),
+  ('2026-08-04', 'FALTO', true, 'CALAMIDAD', '2026-08-04 06:45:00', 30, 19, 11, 2, 1, 13, 31),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 07:35:00', 30, 19, 12, 2, 1, 33, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 06:47:00', 30, 19, 11, 2, 1, 10, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 07:42:00', 30, 19, 12, 2, 1, 10, null),
+  ('2026-08-06', 'EVASION', true, 'MEDICA', '2026-08-06 06:43:00', 30, 19, 11, 2, 1, 21, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 07:36:00', 30, 19, 12, 2, 1, 32, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 06:45:00', 30, 19, 11, 2, 1, 8, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 07:43:00', 30, 19, 12, 2, 1, 47, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:48:00', 31, 28, 6, 1, 2, 7, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 13:38:00', 31, 28, 7, 1, 2, 12, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:40:00', 31, 28, 6, 1, 2, 18, null),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 13:37:00', 31, 28, 7, 1, 2, 17, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:42:00', 31, 28, 6, 1, 2, 12, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:37:00', 31, 28, 7, 1, 2, 6, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:41:00', 31, 28, 6, 1, 2, 11, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:37:00', 31, 28, 7, 1, 2, 44, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:41:00', 31, 28, 6, 1, 2, 38, null),
+  ('2026-08-07', 'EVASION', false, 'NINGUNA', '2026-08-07 13:44:00', 31, 28, 7, 1, 2, 7, null),
+  ('2026-08-03', 'RETARDO', true, 'CALAMIDAD', '2026-08-03 12:48:00', 32, 28, 6, 1, 2, 31, 24),
+  ('2026-08-03', 'FALTO', true, 'CALAMIDAD', '2026-08-03 13:40:00', 32, 28, 7, 1, 2, 14, null),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 12:42:00', 32, 28, 6, 1, 2, 17, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:38:00', 32, 28, 7, 1, 2, 50, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 12:50:00', 32, 28, 6, 1, 2, 50, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:42:00', 32, 28, 7, 1, 2, 40, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:46:00', 32, 28, 6, 1, 2, 8, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:35:00', 32, 28, 7, 1, 2, 29, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:42:00', 32, 28, 6, 1, 2, 24, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 13:40:00', 32, 28, 7, 1, 2, 24, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:44:00', 33, 28, 6, 1, 2, 14, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 13:36:00', 33, 28, 7, 1, 2, 46, 3),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:49:00', 33, 28, 6, 1, 2, 46, null),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 13:45:00', 33, 28, 7, 1, 2, 34, 3),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:40:00', 33, 28, 6, 1, 2, 23, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 13:42:00', 33, 28, 7, 1, 2, 11, 3),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:43:00', 33, 28, 6, 1, 2, 31, null),
+  ('2026-08-06', 'FALTO', false, 'NINGUNA', '2026-08-06 13:40:00', 33, 28, 7, 1, 2, 7, 15),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:46:00', 33, 28, 6, 1, 2, 29, null),
+  ('2026-08-07', 'EVASION', true, 'MEDICA', '2026-08-07 13:35:00', 33, 28, 7, 1, 2, 27, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:43:00', 34, 28, 6, 1, 2, 20, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:42:00', 34, 28, 7, 1, 2, 49, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:46:00', 34, 28, 6, 1, 2, 40, null),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 13:35:00', 34, 28, 7, 1, 2, 45, 10),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 12:44:00', 34, 28, 6, 1, 2, 22, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:44:00', 34, 28, 7, 1, 2, 25, null),
+  ('2026-08-06', 'FALTO', true, 'CALAMIDAD', '2026-08-06 12:47:00', 34, 28, 6, 1, 2, 17, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:41:00', 34, 28, 7, 1, 2, 40, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:42:00', 34, 28, 6, 1, 2, 32, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:45:00', 34, 28, 7, 1, 2, 6, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:46:00', 35, 28, 6, 1, 2, 38, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:41:00', 35, 28, 7, 1, 2, 28, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:44:00', 35, 28, 6, 1, 2, 40, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:43:00', 35, 28, 7, 1, 2, 39, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:50:00', 35, 28, 6, 1, 2, 21, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:37:00', 35, 28, 7, 1, 2, 17, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:50:00', 35, 28, 6, 1, 2, 40, null),
+  ('2026-08-06', 'EVASION', false, 'NINGUNA', '2026-08-06 13:40:00', 35, 28, 7, 1, 2, 21, 47),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 12:49:00', 35, 28, 6, 1, 2, 37, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:35:00', 35, 28, 7, 1, 2, 7, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 12:47:00', 36, 38, 15, 2, 2, 32, 18),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:35:00', 36, 38, 16, 2, 2, 17, null),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 12:42:00', 36, 38, 15, 2, 2, 6, null),
+  ('2026-08-04', 'FALTO', true, 'CALAMIDAD', '2026-08-04 13:45:00', 36, 38, 16, 2, 2, 33, null),
+  ('2026-08-05', 'EVASION', true, 'PERMITIDA', '2026-08-05 12:48:00', 36, 38, 15, 2, 2, 22, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:42:00', 36, 38, 16, 2, 2, 39, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:46:00', 36, 38, 15, 2, 2, 15, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:39:00', 36, 38, 16, 2, 2, 19, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:47:00', 36, 38, 15, 2, 2, 34, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:41:00', 36, 38, 16, 2, 2, 23, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:50:00', 37, 38, 15, 2, 2, 19, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:42:00', 37, 38, 16, 2, 2, 34, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:42:00', 37, 38, 15, 2, 2, 11, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:40:00', 37, 38, 16, 2, 2, 19, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 12:44:00', 37, 38, 15, 2, 2, 25, 36),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:44:00', 37, 38, 16, 2, 2, 48, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:42:00', 37, 38, 15, 2, 2, 47, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:37:00', 37, 38, 16, 2, 2, 10, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:49:00', 37, 38, 15, 2, 2, 42, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:38:00', 37, 38, 16, 2, 2, 19, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:42:00', 38, 38, 15, 2, 2, 33, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:43:00', 38, 38, 16, 2, 2, 32, null),
+  ('2026-08-04', 'EVASION', true, 'CALAMIDAD', '2026-08-04 12:47:00', 38, 38, 15, 2, 2, 11, 34),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:38:00', 38, 38, 16, 2, 2, 13, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:49:00', 38, 38, 15, 2, 2, 23, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 13:40:00', 38, 38, 16, 2, 2, 48, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:50:00', 38, 38, 15, 2, 2, 14, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:44:00', 38, 38, 16, 2, 2, 29, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:42:00', 38, 38, 15, 2, 2, 9, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:37:00', 38, 38, 16, 2, 2, 27, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:45:00', 39, 38, 15, 2, 2, 37, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:38:00', 39, 38, 16, 2, 2, 36, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:46:00', 39, 38, 15, 2, 2, 19, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:37:00', 39, 38, 16, 2, 2, 33, null),
+  ('2026-08-05', 'FALTO', true, 'MEDICA', '2026-08-05 12:44:00', 39, 38, 15, 2, 2, 26, 11),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:36:00', 39, 38, 16, 2, 2, 10, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:49:00', 39, 38, 15, 2, 2, 24, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:44:00', 39, 38, 16, 2, 2, 33, null),
+  ('2026-08-07', 'EVASION', false, 'NINGUNA', '2026-08-07 12:48:00', 39, 38, 15, 2, 2, 24, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:35:00', 39, 38, 16, 2, 2, 7, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:44:00', 40, 38, 15, 2, 2, 39, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:39:00', 40, 38, 16, 2, 2, 40, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:40:00', 40, 38, 15, 2, 2, 13, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:38:00', 40, 38, 16, 2, 2, 10, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 12:40:00', 40, 38, 15, 2, 2, 22, 9),
+  ('2026-08-05', 'FALTO', true, 'PERMITIDA', '2026-08-05 13:38:00', 40, 38, 16, 2, 2, 35, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:41:00', 40, 38, 15, 2, 2, 44, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:45:00', 40, 38, 16, 2, 2, 50, null),
+  ('2026-08-07', 'RETARDO', false, 'NINGUNA', '2026-08-07 12:40:00', 40, 38, 15, 2, 2, 10, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:44:00', 40, 38, 16, 2, 2, 27, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:44:00', 41, 42, 15, 2, 2, 22, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:36:00', 41, 42, 16, 2, 2, 29, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:45:00', 41, 42, 15, 2, 2, 37, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:45:00', 41, 42, 16, 2, 2, 21, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:50:00', 41, 42, 15, 2, 2, 14, null),
+  ('2026-08-05', 'FALTO', true, 'CALAMIDAD', '2026-08-05 13:40:00', 41, 42, 16, 2, 2, 24, 17),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:40:00', 41, 42, 15, 2, 2, 46, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:37:00', 41, 42, 16, 2, 2, 47, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 12:48:00', 41, 42, 15, 2, 2, 45, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 13:39:00', 41, 42, 16, 2, 2, 43, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:43:00', 42, 42, 15, 2, 2, 10, null),
+  ('2026-08-03', 'FALTO', true, 'MEDICA', '2026-08-03 13:45:00', 42, 42, 16, 2, 2, 20, 22),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:46:00', 42, 42, 15, 2, 2, 47, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:42:00', 42, 42, 16, 2, 2, 42, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:41:00', 42, 42, 15, 2, 2, 32, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:39:00', 42, 42, 16, 2, 2, 15, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:44:00', 42, 42, 15, 2, 2, 22, null),
+  ('2026-08-06', 'EVASION', false, 'NINGUNA', '2026-08-06 13:40:00', 42, 42, 16, 2, 2, 43, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:49:00', 42, 42, 15, 2, 2, 38, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:41:00', 42, 42, 16, 2, 2, 29, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:45:00', 43, 42, 15, 2, 2, 33, null),
+  ('2026-08-03', 'FALTO', false, 'NINGUNA', '2026-08-03 13:40:00', 43, 42, 16, 2, 2, 17, 35),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:45:00', 43, 42, 15, 2, 2, 33, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:43:00', 43, 42, 16, 2, 2, 32, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:44:00', 43, 42, 15, 2, 2, 7, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:41:00', 43, 42, 16, 2, 2, 11, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:47:00', 43, 42, 15, 2, 2, 29, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:44:00', 43, 42, 16, 2, 2, 50, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:46:00', 43, 42, 15, 2, 2, 47, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:44:00', 43, 42, 16, 2, 2, 40, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:50:00', 44, 42, 15, 2, 2, 25, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:38:00', 44, 42, 16, 2, 2, 10, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:41:00', 44, 42, 15, 2, 2, 23, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:35:00', 44, 42, 16, 2, 2, 37, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:47:00', 44, 42, 15, 2, 2, 34, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:45:00', 44, 42, 16, 2, 2, 41, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:46:00', 44, 42, 15, 2, 2, 47, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:43:00', 44, 42, 16, 2, 2, 6, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:44:00', 44, 42, 15, 2, 2, 10, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:36:00', 44, 42, 16, 2, 2, 20, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:50:00', 45, 42, 15, 2, 2, 22, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:41:00', 45, 42, 16, 2, 2, 45, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:46:00', 45, 42, 15, 2, 2, 20, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:39:00', 45, 42, 16, 2, 2, 18, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 12:45:00', 45, 42, 15, 2, 2, 23, 23),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 13:36:00', 45, 42, 16, 2, 2, 38, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:47:00', 45, 42, 15, 2, 2, 28, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:43:00', 45, 42, 16, 2, 2, 13, null),
+  ('2026-08-07', 'RETARDO', true, 'PERMITIDA', '2026-08-07 12:44:00', 45, 42, 15, 2, 2, 50, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:39:00', 45, 42, 16, 2, 2, 10, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:42:00', 46, 46, 15, 2, 2, 6, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:39:00', 46, 46, 16, 2, 2, 41, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:50:00', 46, 46, 15, 2, 2, 27, null),
+  ('2026-08-04', 'FALTO', true, 'CALAMIDAD', '2026-08-04 13:45:00', 46, 46, 16, 2, 2, 29, 7),
+  ('2026-08-05', 'RETARDO', false, 'NINGUNA', '2026-08-05 12:49:00', 46, 46, 15, 2, 2, 49, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:36:00', 46, 46, 16, 2, 2, 37, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:48:00', 46, 46, 15, 2, 2, 37, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:44:00', 46, 46, 16, 2, 2, 42, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:46:00', 46, 46, 15, 2, 2, 48, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:44:00', 46, 46, 16, 2, 2, 35, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:50:00', 47, 46, 15, 2, 2, 28, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:40:00', 47, 46, 16, 2, 2, 32, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:45:00', 47, 46, 15, 2, 2, 29, null),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 13:43:00', 47, 46, 16, 2, 2, 18, 4),
+  ('2026-08-05', 'RETARDO', false, 'NINGUNA', '2026-08-05 12:50:00', 47, 46, 15, 2, 2, 50, 4),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:45:00', 47, 46, 16, 2, 2, 32, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:48:00', 47, 46, 15, 2, 2, 40, null),
+  ('2026-08-06', 'FALTO', false, 'NINGUNA', '2026-08-06 13:38:00', 47, 46, 16, 2, 2, 10, 4),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:42:00', 47, 46, 15, 2, 2, 22, null),
+  ('2026-08-07', 'FALTO', false, 'NINGUNA', '2026-08-07 13:42:00', 47, 46, 16, 2, 2, 10, 42),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:44:00', 48, 46, 15, 2, 2, 39, null),
+  ('2026-08-03', 'EVASION', true, 'PERMITIDA', '2026-08-03 13:39:00', 48, 46, 16, 2, 2, 8, 16),
+  ('2026-08-04', 'FALTO', true, 'CALAMIDAD', '2026-08-04 12:49:00', 48, 46, 15, 2, 2, 11, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 13:37:00', 48, 46, 16, 2, 2, 45, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:45:00', 48, 46, 15, 2, 2, 35, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:40:00', 48, 46, 16, 2, 2, 39, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:47:00', 48, 46, 15, 2, 2, 35, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:40:00', 48, 46, 16, 2, 2, 50, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:47:00', 48, 46, 15, 2, 2, 43, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:36:00', 48, 46, 16, 2, 2, 30, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:49:00', 49, 46, 15, 2, 2, 17, null),
+  ('2026-08-03', 'EVASION', true, 'PERMITIDA', '2026-08-03 13:43:00', 49, 46, 16, 2, 2, 18, 50),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:41:00', 49, 46, 15, 2, 2, 36, null),
+  ('2026-08-04', 'EVASION', false, 'NINGUNA', '2026-08-04 13:36:00', 49, 46, 16, 2, 2, 23, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:41:00', 49, 46, 15, 2, 2, 13, null),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 13:38:00', 49, 46, 16, 2, 2, 37, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:47:00', 49, 46, 15, 2, 2, 18, null),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 13:42:00', 49, 46, 16, 2, 2, 50, null),
+  ('2026-08-07', 'EVASION', false, 'NINGUNA', '2026-08-07 12:44:00', 49, 46, 15, 2, 2, 35, null),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 13:38:00', 49, 46, 16, 2, 2, 11, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 12:44:00', 50, 46, 15, 2, 2, 29, null),
+  ('2026-08-03', 'ASISTIO', false, 'NINGUNA', '2026-08-03 13:43:00', 50, 46, 16, 2, 2, 37, null),
+  ('2026-08-04', 'ASISTIO', false, 'NINGUNA', '2026-08-04 12:43:00', 50, 46, 15, 2, 2, 17, null),
+  ('2026-08-04', 'FALTO', false, 'NINGUNA', '2026-08-04 13:35:00', 50, 46, 16, 2, 2, 24, 5),
+  ('2026-08-05', 'ASISTIO', false, 'NINGUNA', '2026-08-05 12:40:00', 50, 46, 15, 2, 2, 42, null),
+  ('2026-08-05', 'FALTO', false, 'NINGUNA', '2026-08-05 13:43:00', 50, 46, 16, 2, 2, 16, 5),
+  ('2026-08-06', 'ASISTIO', false, 'NINGUNA', '2026-08-06 12:43:00', 50, 46, 15, 2, 2, 13, null),
+  ('2026-08-06', 'EVASION', false, 'NINGUNA', '2026-08-06 13:38:00', 50, 46, 16, 2, 2, 27, 5),
+  ('2026-08-07', 'ASISTIO', false, 'NINGUNA', '2026-08-07 12:48:00', 50, 46, 15, 2, 2, 19, null),
+  ('2026-08-07', 'EVASION', true, 'MEDICA', '2026-08-07 13:44:00', 50, 46, 16, 2, 2, 27, 43);
+  
+  -- Datos de prueba --
+
+insert into auditoria_asistencia (accion, campomodificado, valoranterior, valornuevo, motivo, fechahora, idasistencia) values
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-03 10:35:00', 102),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-03 11:37:00', 282),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-03 22:36:00', 132),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-03 23:42:00', 231),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-04 04:39:00', 472),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-04 08:45:00', 293),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-04 08:45:00', 412),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-04 12:46:00', 223),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-04 14:48:00', 311),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-04 18:39:00', 134),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-04 20:47:00', 373),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-04 21:45:00', 454),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-04 23:49:00', 473),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-05 01:38:00', 194),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-05 04:39:00', 54),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-05 05:37:00', 304),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-05 05:45:00', 93),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-05 08:39:00', 174),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-05 11:45:00', 324),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-05 12:37:00', 146),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-05 12:43:00', 464),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-05 13:41:00', 155),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-05 14:40:00', 206),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-05 15:38:00', 396),
+  ('MODIFICAR', 'categoria', 'FALTO', 'RETARDO', 'El estudiante llegó después del primer llamado de lista', '2026-08-05 19:45:00', 215),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-05 23:41:00', 245),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-05 23:41:00', 126),
+  ('MODIFICAR', 'categoria', 'FALTO', 'RETARDO', 'El estudiante llegó después del primer llamado de lista', '2026-08-05 23:42:00', 25),
+  ('MODIFICAR', 'categoria', 'FALTO', 'RETARDO', 'El estudiante llegó después del primer llamado de lista', '2026-08-06 01:50:00', 465),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-06 09:45:00', 196),
+  ('MODIFICAR', 'categoria', 'FALTO', 'RETARDO', 'El estudiante llegó después del primer llamado de lista', '2026-08-06 11:43:00', 237),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-06 12:42:00', 258),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-06 14:40:00', 418),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-06 14:43:00', 297),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-06 15:40:00', 406),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-06 18:38:00', 498),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-06 19:43:00', 87),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-07 04:40:00', 348),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-07 05:37:00', 48),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-07 10:42:00', 269),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-07 16:35:00', 240),
+  ('MODIFICAR', 'categoria', 'FALTO', 'RETARDO', 'El estudiante llegó después del primer llamado de lista', '2026-08-07 16:43:00', 19),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente informó calamidad doméstica', '2026-08-07 17:47:00', 337),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-07 19:44:00', 310),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-07 21:44:00', 489),
+  ('MODIFICAR', 'categoria', 'ASISTIO', 'EVASION', 'Otro docente reportó que no estaba en clase', '2026-08-08 04:48:00', 389),
+  ('MODIFICAR', 'justificada', '0', '1', 'El acudiente presentó incapacidad médica', '2026-08-08 07:42:00', 130),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-08 07:50:00', 279),
+  ('MODIFICAR', 'justificada', '0', '1', 'Salida autorizada por coordinación', '2026-08-08 09:44:00', 449),
+  ('MODIFICAR', 'categoria', 'FALTO', 'RETARDO', 'El estudiante llegó después del primer llamado de lista', '2026-08-08 11:40:00', 399);  
+  
+  -- RQF 26 configurar categorías de asistencia --
+select
+    column_type as categorias_disponibles
+from information_schema.columns
+where table_schema = 'colegio_mzo'
+  and table_name = 'asistencia'
+  and column_name = 'categoria';
+
+-- rqf 027. registrar asistencia
+-- rqf 028. registrar fecha, hora y usuario
+-- rqf 031. detectar registros duplicados
+
+delimiter $$
+
+create procedure sp_registrar_asistencia(
+    in p_fecha date,
+    in p_categoria varchar(20),
+    in p_justificada boolean,
+    in p_justificacion varchar(20),
+    in p_idestudiante int,
+    in p_idcurso int,
+    in p_idbloque int,
+    in p_idnivel int,
+    in p_idjornada int,
+    in p_idusuario int
+)
+begin
+    -- validar que el estudiante exista y esté activo.
+    if not exists (
+        select 1
+        from estudiante
+        where idestudiante = p_idestudiante
+          and activo = true
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'el estudiante no existe o está inactivo';
+    end if;
+
+    -- validar curso.
+    if not exists (
+        select 1
+        from curso
+        where idcurso = p_idcurso
+          and activo = true
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'el curso no existe o está inactivo';
+    end if;
+
+    -- validar bloque, nivel y jornada.
+    if not exists (
+        select 1 from bloque where idbloque = p_idbloque
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'el bloque horario no existe';
+    end if;
+
+    if not exists (
+        select 1 from nivel where idnivel = p_idnivel
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'el nivel educativo no existe';
+    end if;
+
+    if not exists (
+        select 1 from jornada where idjornada = p_idjornada
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'la jornada no existe';
+    end if;
+
+    -- validar usuario activo.
+    if not exists (
+        select 1
+        from usuario
+        where idusuario = p_idusuario
+          and activo = true
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'el usuario no existe o está inactivo';
+    end if;
+
+    -- validar categoría.
+    if p_categoria not in ('ASISTIO', 'FALTO', 'RETARDO', 'EVASION') then
+        signal sqlstate '45000'
+        set message_text = 'categoría de asistencia no válida';
+    end if;
+
+    -- evitar justificaciones incompatibles con la categoría.
+    if p_categoria = 'ASISTIO' and p_justificada = true then
+        signal sqlstate '45000'
+        set message_text = 'una asistencia no requiere justificación';
+    end if;
+
+    if p_justificada = true and
+       p_justificacion not in ('CALAMIDAD', 'MEDICA', 'PERMITIDA') then
+        signal sqlstate '45000'
+        set message_text = 'tipo de justificación no válido';
+    end if;
+
+    if p_justificada = false and p_justificacion <> 'NINGUNA' then
+        signal sqlstate '45000'
+        set message_text = 'una novedad no justificada debe tener justificación ninguna';
+    end if;
+
+    -- evitar duplicados para estudiante, fecha y bloque.
+    if exists (
+        select 1
+        from asistencia
+        where fecha = p_fecha
+          and idestudiante = p_idestudiante
+          and idbloque = p_idbloque
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'ya existe un registro para este estudiante, fecha y bloque';
+    end if;
+
+    -- insertar registro.
+    insert into asistencia (
+        fecha,
+        categoria,
+        justificada,
+        justificacion,
+        idestudiante,
+        idcurso,
+        idbloque,
+        idnivel,
+        idjornada,
+        idusuario
+    )
+    values (
+        p_fecha,
+        p_categoria,
+        p_justificada,
+        p_justificacion,
+        p_idestudiante,
+        p_idcurso,
+        p_idbloque,
+        p_idnivel,
+        p_idjornada,
+        p_idusuario
+    );
+end$$
+
+
+-- rqf 029. registrar justificación
+
+DELIMITER $$
+create procedure sp_registrar_justificacion(
+    in p_idasistencia int,
+    in p_justificacion varchar(20)
+)
+begin
+    if not exists (
+        select 1
+        from asistencia
+        where idasistencia = p_idasistencia
+          and categoria in ('FALTO', 'RETARDO', 'EVASION')
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'no existe una novedad justificable para ese registro';
+    end if;
+
+    if p_justificacion not in ('CALAMIDAD', 'MEDICA', 'PERMITIDA') then
+        signal sqlstate '45000'
+        set message_text = 'tipo de justificación no válido';
+    end if;
+
+    set @motivo_auditoria = 'registro de justificación de asistencia';
+
+    update asistencia
+    set justificada = true,
+        justificacion = p_justificacion
+    where idasistencia = p_idasistencia;
+
+    set @motivo_auditoria = null;
+end$$
+DELIMITER ;
+
+-- rqf 030. actualizar registro
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_corregir_asistencia(
+    IN p_idasistencia INT,
+    IN p_categoria VARCHAR(20),
+    IN p_justificada BOOLEAN,
+    IN p_justificacion VARCHAR(20),
+    IN p_motivo VARCHAR(255)
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM asistencia
+        WHERE idasistencia = p_idasistencia
+    ) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'el registro de asistencia no existe';
+    END IF;
+
+    IF p_categoria NOT IN ('ASISTIO', 'FALTO', 'RETARDO', 'EVASION') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'categoría no válida';
+    END IF;
+
+    IF p_categoria = 'ASISTIO' THEN
+        SET p_justificada = FALSE;
+        SET p_justificacion = 'NINGUNA';
+    ELSEIF p_justificada = FALSE THEN
+        SET p_justificacion = 'NINGUNA';
+    ELSEIF p_justificacion NOT IN ('CALAMIDAD', 'MEDICA', 'PERMITIDA') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'justificación no válida';
+    END IF;
+
+    SET @motivo_auditoria = p_motivo;
+
+    UPDATE asistencia
+    SET categoria = p_categoria,
+        justificada = p_justificada,
+        justificacion = p_justificacion
+    WHERE idasistencia = p_idasistencia;
+
+    SET @motivo_auditoria = NULL;
+END$$
+
+DELIMITER ;
+
+-- rqf 031. eliminar registro duplicado --
+
+DELIMITER $$
+create procedure sp_eliminar_asistencia_duplicada(
+    in p_idasistencia int
+)
+begin
+    if not exists (
+        select 1
+        from asistencia
+        where idasistencia = p_idasistencia
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'el registro no existe';
+    end if;
+
+    if exists (
+        select 1
+        from auditoria_asistencia
+        where idasistencia = p_idasistencia
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'no se puede eliminar: el registro tiene historial de auditoría';
+    end if;
+
+    delete from asistencia
+    where idasistencia = p_idasistencia;
+end$$
+DELIMITER ;
+
+-- rqf 032. consultar asistencias
+-- rqf 033. consultar inasistencias
+-- rqf 034. consultar retardos
+-- rqf 035. consultar evasiones
+-- rqf 036. consultar justificaciones
+
+create view vw_asistencias_detalladas as
+select
+    a.idasistencia,
+    a.fecha,
+    a.fecha_hora_registro,
+    a.categoria,
+    a.justificada,
+    a.justificacion,
+    e.idestudiante,
+    e.nombres as nombre_estudiante,
+    e.apellidos as apellido_estudiante,
+    e.numerodocumentoest,
+    c.idcurso,
+    c.nombre as nombre_curso,
+    c.grado,
+    b.idbloque,
+    b.nombre as nombre_bloque,
+    b.numero as numero_bloque,
+    n.nombre as nivel,
+    j.nombre as jornada,
+    u.idusuario,
+    u.nombres as nombre_usuario,
+    u.apellidos as apellido_usuario
+from asistencia a
+inner join estudiante e on a.idestudiante = e.idestudiante
+inner join curso c on a.idcurso = c.idcurso
+inner join bloque b on a.idbloque = b.idbloque
+inner join nivel n on a.idnivel = n.idnivel
+inner join jornada j on a.idjornada = j.idjornada
+inner join usuario u on a.idusuario = u.idusuario;
+
+
+create view vw_inasistencias as
+select *
+from vw_asistencias_detalladas
+where categoria = 'FALTO';
+
+
+create view vw_retardos as
+select *
+from vw_asistencias_detalladas
+where categoria = 'RETARDO';
+
+
+create view vw_evasiones as
+select *
+from vw_asistencias_detalladas
+where categoria = 'EVASION';
+
+
+create view vw_justificaciones as
+select *
+from vw_asistencias_detalladas
+where justificada = true
+  and categoria in ('FALTO', 'RETARDO', 'EVASION');
+
+-- rqf 037. contabilizar novedades desde la última citación
+-- rqf 038. generar aviso al alcanzar tres novedades
+
+DELIMITER $$
+create procedure sp_generar_alertas_citacion()
+begin
+    select
+        e.idestudiante,
+        e.nombres,
+        e.apellidos,
+        e.idacudiente,
+        count(a.idasistencia) as total_novedades_no_justificadas,
+        max(c.fechacitacion) as ultima_citacion
+    from estudiante e
+    inner join asistencia a
+        on e.idestudiante = a.idestudiante
+    left join citacion c
+        on a.idcitacion = c.idcitacion
+       and c.estado = 'REALIZADA'
+    where a.categoria in ('FALTO', 'RETARDO', 'EVASION')
+      and a.justificada = false
+      and a.fecha > coalesce(
+          (
+              select max(c2.fechacitacion)
+              from asistencia a2
+              inner join citacion c2
+                  on a2.idcitacion = c2.idcitacion
+              where a2.idestudiante = e.idestudiante
+                and c2.estado = 'REALIZADA'
+          ),
+          '1900-01-01'
+      )
+    group by
+        e.idestudiante,
+        e.nombres,
+        e.apellidos,
+        e.idacudiente
+    having count(a.idasistencia) >= 3;
+end
+DELIMITER $$
+
+-- rqf 039. mostrar datos del acudiente -- 
+
+create view vw_acudientes_seguimiento as
+select
+    e.idestudiante,
+    e.nombres as nombre_estudiante,
+    e.apellidos as apellido_estudiante,
+    ac.idacudiente,
+    ac.nombres as nombre_acudiente,
+    ac.apellidos as apellido_acudiente,
+    ac.parentesco,
+    ac.telefono,
+    ac.correo,
+    ac.direccion
+from estudiante e
+inner join acudiente ac
+    on e.idacudiente = ac.idacudiente;
+
+-- rqf 040. registrar citación pendiente
+-- rqf 041. crear citación asociada a un registro de asistencia
+-- la asociación se hace usando asistencia.idcitacion.
+
+DELIMITER $$
+
+create procedure sp_crear_citacion(
+    in p_idasistencia int,
+    in p_fechacitacion date,
+    in p_motivo varchar(255)
+)
+begin
+    declare v_idcitacion int;
+
+    if not exists (
+        select 1
+        from asistencia
+        where idasistencia = p_idasistencia
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'no existe el registro de asistencia indicado';
+    end if;
+
+    if p_motivo is null or trim(p_motivo) = '' then
+        signal sqlstate '45000'
+        set message_text = 'el motivo de la citación es obligatorio';
+    end if;
+
+    insert into citacion (
+        fechacitacion,
+        motivo,
+        estado
+    )
+    values (
+        p_fechacitacion,
+        p_motivo,
+        'PENDIENTE'
+    );
+
+    set v_idcitacion = last_insert_id();
+
+    update asistencia
+    set idcitacion = v_idcitacion
+    where idasistencia = p_idasistencia;
+
+    select
+        v_idcitacion as idcitacion_creada,
+        'PENDIENTE' as estado;
+end$$
+DELIMITER ;
+
+-- rqf 042. actualizar estado de citación
+DELIMITER $$
+create procedure sp_realizar_citacion(
+    in p_idcitacion int
+)
+begin
+    if not exists (
+        select 1
+        from citacion
+        where idcitacion = p_idcitacion
+    ) then
+        signal sqlstate '45000'
+        set message_text = 'la citación no existe';
+    end if;
+
+    update citacion
+    set estado = 'REALIZADA'
+    where idcitacion = p_idcitacion;
+end$$
+DELIMITER ;
+
+-- rqf 043. consultar citaciones y estado
+
+create view vw_citaciones_detalladas as
+select
+    c.idcitacion,
+    c.fechacitacion,
+    c.fecharegistro,
+    c.motivo,
+    c.estado,
+    a.idasistencia,
+    a.fecha as fecha_asistencia,
+    a.idestudiante,
+    e.nombres as nombre_estudiante,
+    e.apellidos as apellido_estudiante,
+    e.idacudiente,
+    ac.nombres as nombre_acudiente,
+    ac.apellidos as apellido_acudiente,
+    ac.telefono,
+    ac.correo
+from citacion c
+inner join asistencia a
+    on c.idcitacion = a.idcitacion
+inner join estudiante e
+    on a.idestudiante = e.idestudiante
+inner join acudiente ac
+    on e.idacudiente = ac.idacudiente;
+
+-- rqf 044. filtrar historial por estudiante
+
+DELIMITER $$
+
+create procedure sp_historial_por_estudiante(
+    in p_idestudiante int
+)
+begin
+    select
+        au.idauditoria,
+        au.idasistencia,
+        e.idestudiante,
+        e.nombres,
+        e.apellidos,
+        au.accion,
+        au.campomodificado,
+        au.valoranterior,
+        au.valornuevo,
+        au.motivo,
+        au.fechahora
+    from auditoria_asistencia au
+    inner join asistencia a
+        on au.idasistencia = a.idasistencia
+    inner join estudiante e
+        on a.idestudiante = e.idestudiante
+    where e.idestudiante = p_idestudiante
+    order by au.fechahora desc;
+end$$
+DELIMITER ;
+
+-- rqf 045. filtrar historial por curso
+DELIMITER $$
+create procedure sp_historial_por_curso(
+    in p_idcurso int
+)
+begin
+    select
+        au.idauditoria,
+        au.idasistencia,
+        a.idcurso,
+        c.nombre as curso,
+        au.accion,
+        au.campomodificado,
+        au.valoranterior,
+        au.valornuevo,
+        au.motivo,
+        au.fechahora
+    from auditoria_asistencia au
+    inner join asistencia a
+        on au.idasistencia = a.idasistencia
+    inner join curso c
+        on a.idcurso = c.idcurso
+    where a.idcurso = p_idcurso
+    order by au.fechahora desc;
+end$$
+DELIMITER ;
+
+-- rqf 046. filtrar historial por rango de fechas
+
+DELIMITER $$
+create procedure sp_historial_por_fechas(
+    in p_fecha_inicio date,
+    in p_fecha_fin date
+)
+begin
+    select
+        idauditoria,
+        idasistencia,
+        accion,
+        campomodificado,
+        valoranterior,
+        valornuevo,
+        motivo,
+        fechahora
+    from auditoria_asistencia
+    where fechahora >= p_fecha_inicio
+      and fechahora < date_add(p_fecha_fin, interval 1 day)
+    order by fechahora desc;
+end$$
+DELIMITER ;
+
+-- rqf 047. identificar responsable --
+
+create view vw_responsable_registro_original as
+select
+    a.idasistencia,
+    a.idusuario,
+    u.nombres,
+    u.apellidos,
+    u.rol,
+    a.fecha_hora_registro
+from asistencia a
+inner join usuario u
+    on a.idusuario = u.idusuario;
+
+-- rqf 048. mostrar fecha y hora de modificación
+-- rqf 049. identificar campo y valores modificados
+
+DESCRIBE auditoria_asistencia;
+CREATE VIEW vw_detalle_auditoria AS
+SELECT
+    au.id_auditoria, -- Cambia 'idauditoria' por el nombre real de tu columna
+    au.idasistencia,
+    au.accion,
+    au.campomodificado,
+    au.valoranterior,
+    au.valornuevo,
+    au.motivo,
+    au.fechahora
+FROM auditoria_asistencia au;
+
+-- rqf 050. calcular inasistencias por curso
+-- rqf 051. filtrar por jornada y periodo
+-- rqf 052. identificar curso con más inasistencias
+
+DELIMITER $$
+create procedure sp_analisis_inasistencias_curso(
+    in p_idjornada int,
+    in p_fecha_inicio date,
+    in p_fecha_fin date
+)
+begin
+    select
+        c.idcurso,
+        c.nombre as curso,
+        c.grado,
+        j.nombre as jornada,
+        count(a.idasistencia) as total_inasistencias
+    from asistencia a
+    inner join curso c
+        on a.idcurso = c.idcurso
+    inner join jornada j
+        on a.idjornada = j.idjornada
+    where a.categoria = 'FALTO'
+      and a.idjornada = p_idjornada
+      and a.fecha between p_fecha_inicio and p_fecha_fin
+    group by
+        c.idcurso,
+        c.nombre,
+        c.grado,
+        j.nombre
+    order by total_inasistencias desc;
+end$$
+DELIMITER ;
+
+DELIMITER $$
+create procedure sp_curso_mas_inasistencias(
+    in p_idjornada int,
+    in p_fecha_inicio date,
+    in p_fecha_fin date
+)
+begin
+    select
+        c.idcurso,
+        c.nombre as curso,
+        c.grado,
+        j.nombre as jornada,
+        count(a.idasistencia) as total_inasistencias
+    from asistencia a
+    inner join curso c
+        on a.idcurso = c.idcurso
+    inner join jornada j
+        on a.idjornada = j.idjornada
+    where a.categoria = 'FALTO'
+      and a.idjornada = p_idjornada
+      and a.fecha between p_fecha_inicio and p_fecha_fin
+    group by
+        c.idcurso,
+        c.nombre,
+        c.grado,
+        j.nombre
+    order by total_inasistencias desc
+    limit 1;
+end$$
+DELIMITER ;
+
+-- rqf 053. calcular tasa de ausentismo
+-- rqf 054. ordenar cursos de mayor a menor
+-- rqf 055. consultar resultados por jornada y periodo -- 
+
+DELIMITER $$
+create procedure sp_ranking_ausentismo(
+    in p_idjornada int,
+    in p_fecha_inicio date,
+    in p_fecha_fin date
+)
+begin
+    select
+        c.idcurso,
+        c.nombre as curso,
+        c.grado,
+        j.nombre as jornada,
+
+        sum(
+            case
+                when a.categoria = 'FALTO' then 1
+                else 0
+            end
+        ) as total_inasistencias,
+
+        count(a.idasistencia) as total_oportunidades,
+
+        round(
+            sum(
+                case
+                    when a.categoria = 'FALTO' then 1
+                    else 0
+                end
+            ) * 100.0 / nullif(count(a.idasistencia), 0),
+            2
+        ) as tasa_ausentismo
+
+    from asistencia a
+    inner join curso c
+        on a.idcurso = c.idcurso
+    inner join jornada j
+        on a.idjornada = j.idjornada
+    where a.idjornada = p_idjornada
+      and a.fecha between p_fecha_inicio and p_fecha_fin
+    group by
+        c.idcurso,
+        c.nombre,
+        c.grado,
+        j.nombre
+    order by tasa_ausentismo desc;
+end$$
+delimiter ;
+
+
+
+DELIMITER $$
+
+-- AUDITORÍA DE CAMBIOS EN LA CATEGORÍA
+
+CREATE TRIGGER trg_auditoria_categoria
+AFTER UPDATE ON asistencia
+FOR EACH ROW
+BEGIN
+    IF OLD.categoria <> NEW.categoria THEN
+        INSERT INTO auditoria_asistencia (
+            accion,
+            campomodificado,
+            valoranterior,
+            valornuevo,
+            motivo,
+            idasistencia
+        )
+        VALUES (
+            'MODIFICAR',
+            'categoria',
+            OLD.categoria,
+            NEW.categoria,
+            COALESCE(@motivo_auditoria, 'Cambio de categoría de asistencia'),
+            OLD.idasistencia
+        );
+    END IF;
+END$$
+
+-- AUDITORÍA DEL ESTADO DE JUSTIFICACIÓN
+
+CREATE TRIGGER trg_auditoria_justificada
+AFTER UPDATE ON asistencia
+FOR EACH ROW
+BEGIN
+    IF OLD.justificada <> NEW.justificada THEN
+        INSERT INTO auditoria_asistencia (
+            accion,
+            campomodificado,
+            valoranterior,
+            valornuevo,
+            motivo,
+            idasistencia
+        )
+        VALUES (
+            'MODIFICAR',
+            'justificada',
+            OLD.justificada,
+            NEW.justificada,
+            COALESCE(@motivo_auditoria, 'Cambio del estado de justificación'),
+            OLD.idasistencia
+        );
+    END IF;
+END$$
+
+-- AUDITORÍA DEL TIPO DE JUSTIFICACIÓN
+
+CREATE TRIGGER trg_auditoria_justificacion
+AFTER UPDATE ON asistencia
+FOR EACH ROW
+BEGIN
+    IF OLD.justificacion <> NEW.justificacion THEN
+        INSERT INTO auditoria_asistencia (
+            accion,
+            campomodificado,
+            valoranterior,
+            valornuevo,
+            motivo,
+            idasistencia
+        )
+        VALUES (
+            'MODIFICAR',
+            'justificacion',
+            OLD.justificacion,
+            NEW.justificacion,
+            COALESCE(@motivo_auditoria, 'Cambio del tipo de justificación'),
+            OLD.idasistencia
+        );
+    END IF;
+END$$
+DELIMITER ;
+
+  
