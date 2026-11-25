@@ -1794,7 +1794,7 @@ function sp_crear_citacion(p_idestudiante, p_fechacitacion, p_motivo) {
         s.endSession();
         hecho = true;
     } catch (e) {
-        if (!/replica set|Transaction numbers|transactions are not supported|IllegalOperation/i.test(e.message)) throw e;
+                if (!/replica set|Transaction numbers|transactions are not supported|IllegalOperation|retryable writes/i.test(e.message)) throw e;
     }
     if (!hecho) {
         db.citacion.insertOne(doc);
