@@ -6,14 +6,14 @@ repositorio compartido
 Puedes ver el video del tablero en el siguiente enlace
 [Ver Video de Tablero MySQL](https://youtu.be/20lpOCwC21w?si=cpQypUM6W4z1sBH8)
 
-##Tablero Mongo
+## Tablero Mongo
 
 Puedes ver el video del tablero en el siguiente enlace
 [Ver Video de Tablero MongoL](https://youtu.be/aPVlh0A6juQ?si=M0eevN-_mog0MnC8)
 
 ## Interfaz Mongo
 Puedes ver la interfaz con la conexion a  mongo en le siguiente enlace
-[Ver interfaz a Mongo]
+[Ver Video de interfaz MongoL](https://youtu.be/0WF0yZsLuIw)
 
 ## Interfaz a MySQL
 Puedes ver la interzas con la connexión a MySQL en el siguente enlace 
