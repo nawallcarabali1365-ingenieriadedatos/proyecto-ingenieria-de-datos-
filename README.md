@@ -13,7 +13,7 @@ Puedes ver el video del tablero en el siguiente enlace
 
 ## Interfaz Mongo
 Puedes ver la interfaz con la conexion a  mongo en le siguiente enlace
-[Ver interfaz a Mongo]
+[https://youtu.be/0WF0yZsLuIw]
 
 ## Interfaz a MySQL
 Puedes ver la interzas con la connexión a MySQL en el siguente enlace 
